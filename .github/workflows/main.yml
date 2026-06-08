@@ -1,8 +1,8 @@
-name: Weekly Screenshot of Terms Page
+name: Daily Screenshot (Keep Last 5 Days)
 
 on:
   schedule:
-    - cron: "0 13 * * 1"
+    - cron: "0 13 * * *"   # Runs daily at 13:00 UTC
   workflow_dispatch:
 
 permissions:
@@ -54,10 +54,15 @@ jobs:
           })();
           EOF
 
-      - name: Commit screenshot
+      - name: Delete screenshots older than 5 days
+        run: |
+          find screenshots -type f -mtime +5 -name "*.png" -print -delete
+
+      - name: Commit changes
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add screenshots/*.png
-          git commit -m "Weekly screenshot update" || echo "No changes to commit"
+          git add -u screenshots
+          git commit -m "Daily screenshot update (keep last 5 days)" || echo "No changes to commit"
           git push
