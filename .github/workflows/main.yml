@@ -2,7 +2,7 @@ name: Terms15 Table Capture (Last 5 Days)
 
 on:
   schedule:
-    - cron: "0 13 * * *"   # Daily at 13:00 UTC
+    - cron: "0 13 * * *"
   workflow_dispatch:
 
 permissions:
@@ -41,63 +41,75 @@ jobs:
           const fs = require('fs');
 
           (async () => {
-            const browser = await puppeteer.launch({
-              headless: "new",
-              args: ["--no-sandbox", "--disable-setuid-sandbox"]
-            });
+            try {
+              const browser = await puppeteer.launch({
+                headless: "new",
+                args: ["--no-sandbox", "--disable-setuid-sandbox"]
+              });
 
-            const page = await browser.newPage();
-            await page.goto("https://cv.hres.ca/en/terms/15", { waitUntil: "networkidle2" });
+              const page = await browser.newPage();
+              await page.goto("https://cv.hres.ca/en/terms/15", { waitUntil: "networkidle2" });
 
-            // Click the "Last updated" toggle to sort newest first
-            await page.waitForSelector('th[aria-label*="Last updated"]');
-            await page.click('th[aria-label*="Last updated"]');
+              // Wait for table to load
+              await page.waitForSelector("table tbody tr", { timeout: 15000 });
 
-            // Wait for table to refresh
-            await page.waitForTimeout(1500);
+              // Sort by Last Updated using DataTables API
+              await page.evaluate(() => {
+                if (window.jQuery && window.jQuery.fn.dataTable) {
+                  const table = window.jQuery("table").DataTable();
+                  table.order([3, "desc"]).draw(); // column index 3 = Last updated
+                }
+              });
 
-            // Extract rows from last 5 days
-            const fiveDaysAgo = new Date();
-            fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+              await page.waitForTimeout(1500);
 
-            const entries = await page.evaluate((cutoff) => {
-              const rows = [...document.querySelectorAll("table tbody tr")];
-              return rows
-                .map(row => {
-                  const cols = [...row.querySelectorAll("td")].map(td => td.textContent.trim());
-                  const dateText = cols[cols.length - 1]; // last column = Last updated
-                  const parsed = new Date(dateText);
-                  return { cols, parsed };
-                })
-                .filter(r => r.parsed >= new Date(cutoff))
-                .map(r => r.cols);
-            }, fiveDaysAgo.toISOString());
+              // Extract last 5 days
+              const fiveDaysAgo = new Date();
+              fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
 
-            const timestamp = new Date().toISOString().split("T")[0];
+              const entries = await page.evaluate((cutoff) => {
+                const rows = [...document.querySelectorAll("table tbody tr")];
+                return rows
+                  .map(row => {
+                    const cols = [...row.querySelectorAll("td")].map(td => td.textContent.trim());
+                    const dateText = cols[cols.length - 1];
+                    const parsed = new Date(dateText);
+                    return { cols, parsed };
+                  })
+                  .filter(r => r.parsed >= new Date(cutoff))
+                  .map(r => r.cols);
+              }, fiveDaysAgo.toISOString());
 
-            // Save extracted entries
-            const logPath = `logs/entries_${timestamp}.json`;
-            fs.writeFileSync(logPath, JSON.stringify(entries, null, 2));
+              const timestamp = new Date().toISOString().split("T")[0];
 
-            // Screenshot only the table
-            const table = await page.$("table");
-            const screenshotPath = `screenshots/table_${timestamp}.png`;
-            await table.screenshot({ path: screenshotPath });
+              // Save JSON log
+              fs.writeFileSync(`logs/entries_${timestamp}.json`, JSON.stringify(entries, null, 2));
 
-            await browser.close();
+              // Screenshot table safely
+              const table = await page.$("table");
+              if (table) {
+                await table.screenshot({ path: `screenshots/table_${timestamp}.png` });
+              } else {
+                fs.writeFileSync(`logs/error_${timestamp}.txt`, "Table not found");
+              }
+
+              await browser.close();
+            } catch (err) {
+              fs.writeFileSync("logs/error_runtime.txt", err.toString());
+            }
           })();
           EOF
 
       - name: Delete files older than 5 days
         run: |
-          find screenshots -type f -mtime +5 -name "*.png" -print -delete
-          find logs -type f -mtime +5 -name "*.json" -print -delete
+          find screenshots -type f -mtime +5 -delete
+          find logs -type f -mtime +5 -delete
 
       - name: Commit changes
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add screenshots/*.png logs/*.json
+          git add screenshots/*.png logs/*.json logs/*.txt
           git add -u screenshots logs
           git commit -m "Daily table screenshot + last 5 days entries" || echo "No changes to commit"
           git push
