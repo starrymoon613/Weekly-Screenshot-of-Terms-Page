@@ -2,8 +2,11 @@ name: Weekly Screenshot of Terms Page
 
 on:
   schedule:
-    - cron: "0 13 * * 1"   # Every Friday at 09:00 EST (9 AM ET)
-  workflow_dispatch:        # Allow manual runs
+    - cron: "0 13 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   capture:
@@ -18,8 +21,16 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2
+
       - name: Install Puppeteer
         run: npm install puppeteer
+
+      - name: Ensure screenshots folder exists
+        run: mkdir -p screenshots
 
       - name: Capture screenshot
         run: |
@@ -47,7 +58,6 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          mkdir -p screenshots
           git add screenshots/*.png
           git commit -m "Weekly screenshot update" || echo "No changes to commit"
           git push
