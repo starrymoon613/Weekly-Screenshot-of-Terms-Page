@@ -1,8 +1,8 @@
-name: Daily Screenshot (Keep Last 5 Days)
+name: Terms15 Table Capture (Last 5 Days)
 
 on:
   schedule:
-    - cron: "0 13 * * *"   # Runs daily at 13:00 UTC
+    - cron: "0 13 * * *"   # Daily at 13:00 UTC
   workflow_dispatch:
 
 permissions:
@@ -29,13 +29,16 @@ jobs:
       - name: Install Puppeteer
         run: npm install puppeteer
 
-      - name: Ensure screenshots folder exists
-        run: mkdir -p screenshots
+      - name: Ensure folders exist
+        run: |
+          mkdir -p screenshots
+          mkdir -p logs
 
-      - name: Capture screenshot
+      - name: Capture table screenshot + extract last 5 days
         run: |
           node << 'EOF'
           const puppeteer = require('puppeteer');
+          const fs = require('fs');
 
           (async () => {
             const browser = await puppeteer.launch({
@@ -46,23 +49,55 @@ jobs:
             const page = await browser.newPage();
             await page.goto("https://cv.hres.ca/en/terms/15", { waitUntil: "networkidle2" });
 
-            const timestamp = new Date().toISOString().split("T")[0];
-            const path = `screenshots/terms15_${timestamp}.png`;
+            // Click the "Last updated" toggle to sort newest first
+            await page.waitForSelector('th[aria-label*="Last updated"]');
+            await page.click('th[aria-label*="Last updated"]');
 
-            await page.screenshot({ path, fullPage: true });
+            // Wait for table to refresh
+            await page.waitForTimeout(1500);
+
+            // Extract rows from last 5 days
+            const fiveDaysAgo = new Date();
+            fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+
+            const entries = await page.evaluate((cutoff) => {
+              const rows = [...document.querySelectorAll("table tbody tr")];
+              return rows
+                .map(row => {
+                  const cols = [...row.querySelectorAll("td")].map(td => td.textContent.trim());
+                  const dateText = cols[cols.length - 1]; // last column = Last updated
+                  const parsed = new Date(dateText);
+                  return { cols, parsed };
+                })
+                .filter(r => r.parsed >= new Date(cutoff))
+                .map(r => r.cols);
+            }, fiveDaysAgo.toISOString());
+
+            const timestamp = new Date().toISOString().split("T")[0];
+
+            // Save extracted entries
+            const logPath = `logs/entries_${timestamp}.json`;
+            fs.writeFileSync(logPath, JSON.stringify(entries, null, 2));
+
+            // Screenshot only the table
+            const table = await page.$("table");
+            const screenshotPath = `screenshots/table_${timestamp}.png`;
+            await table.screenshot({ path: screenshotPath });
+
             await browser.close();
           })();
           EOF
 
-      - name: Delete screenshots older than 5 days
+      - name: Delete files older than 5 days
         run: |
           find screenshots -type f -mtime +5 -name "*.png" -print -delete
+          find logs -type f -mtime +5 -name "*.json" -print -delete
 
       - name: Commit changes
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add screenshots/*.png
-          git add -u screenshots
-          git commit -m "Daily screenshot update (keep last 5 days)" || echo "No changes to commit"
+          git add screenshots/*.png logs/*.json
+          git add -u screenshots logs
+          git commit -m "Daily table screenshot + last 5 days entries" || echo "No changes to commit"
           git push
