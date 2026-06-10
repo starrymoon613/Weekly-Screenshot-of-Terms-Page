@@ -1,34 +1,91 @@
 
-name: Capture CV Screenshot
+const { chromium } = require("playwright");
 
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: "0 10 * * *" # runs daily at 10 UTC
+(async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
 
-jobs:
-  screenshot:
-    runs-on: ubuntu-latest
+  await page.goto("https://cv.hres.ca/en/terms/15", {
+    waitUntil: "domcontentloaded",
+  });
 
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+  // Wait longer + retry safety
+  await page.waitForTimeout(5000);
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
+  // Ensure table exists
+  const tableExists = await page.locator("table").count();
+  if (!tableExists) {
+    throw new Error("Table not found on page");
+  }
 
-      - name: Install dependencies
-        run: |
-          npm install
-          npx playwright install --with-deps
+  // Set threshold (last 4 days)
+  const threshold = new Date();
+  threshold.setDate(threshold.getDate() - 4);
 
-      - name: Run screenshot script
-        run: node screenshot.js
+  await page.evaluate((thresholdStr) => {
+    const threshold = new Date(thresholdStr);
 
-      - name: Upload screenshot
-        uses: actions/upload-artifact@v4
-        with:
-          name: cv-screenshot
-          path: screenshot.png
+    const table = document.querySelector("table");
+    if (!table) return;
+
+    const headers = Array.from(table.querySelectorAll("thead th"));
+
+    const allowed = [
+      "Code",
+      "English display name",
+      "French display name",
+      "Source Status",
+      "Last updated",
+    ];
+
+    // Map column names → indices
+    const keepIndexes = [];
+    headers.forEach((th, i) => {
+      if (allowed.some(a => th.innerText.includes(a))) {
+        keepIndexes.push(i);
+      }
+    });
+
+    // Remove unwanted header columns
+    headers.forEach((th, i) => {
+      if (!keepIndexes.includes(i)) th.remove();
+    });
+
+    const rows = table.querySelectorAll("tbody tr");
+
+    rows.forEach((row) => {
+      const cells = Array.from(row.querySelectorAll("td"));
+
+      // Remove unwanted columns
+      cells.forEach((td, i) => {
+        if (!keepIndexes.includes(i)) td.remove();
+      });
+
+      const updatedCell = row.querySelector("td:last-child");
+      if (!updatedCell) {
+        row.remove();
+        return;
+      }
+
+      const text = updatedCell.innerText.trim();
+
+      // Safer parsing
+      const date = new Date(text);
+
+      if (isNaN(date.getTime()) || date < threshold) {
+        row.remove();
+      }
+    });
+  }, threshold.toISOString());
+
+  // Give time for DOM changes
+  await page.waitForTimeout(2000);
+
+  const table = page.locator("table");
+
+  await table.screenshot({
+    path: "screenshot.png",
+  });
+
+  await browser.close();
+})();
