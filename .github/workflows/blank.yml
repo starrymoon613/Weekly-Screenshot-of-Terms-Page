@@ -1,11 +1,11 @@
 
-name: Screenshot
+name: Filtered CV Screenshot
 
 on:
   workflow_dispatch:
 
 jobs:
-  run:
+  screenshot:
     runs-on: ubuntu-latest
 
     steps:
@@ -15,8 +15,7 @@ jobs:
         with:
           node-version: 20
 
-      - name: Enable Node 24
-        run: echo "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true" >> $GITHUB_ENV
+      - run: echo "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true" >> $GITHUB_ENV
 
       - name: Install Playwright
         run: |
@@ -31,13 +30,85 @@ jobs:
           const fs = require("fs");
 
           (async () => {
-            const browser = await chromium.launch();
+            const browser = await chromium.launch({ headless: true });
             const page = await browser.newPage();
 
-            await page.goto("https://cv.hres.ca/en/terms/15");
+            await page.goto("https://cv.hres.ca/en/terms/15", {
+              waitUntil: "domcontentloaded",
+              timeout: 60000
+            });
+
+            // wait for table to fully render
             await page.waitForTimeout(8000);
 
-            await page.screenshot({ path: "screenshot.png", fullPage: true });
+            const tableExists = await page.locator("table").count();
+            if (!tableExists) {
+              await page.screenshot({ path: "debug.png", fullPage: true });
+              throw new Error("Table not found");
+            }
+
+            // filter logic
+            const threshold = new Date();
+            threshold.setDate(threshold.getDate() - 4);
+
+            await page.evaluate((thresholdStr) => {
+              const threshold = new Date(thresholdStr);
+              const table = document.querySelector("table");
+              if (!table) return;
+
+              const allowed = [
+                "Code",
+                "English display name",
+                "French display name",
+                "Source Status",
+                "Last updated"
+              ];
+
+              const headers = Array.from(table.querySelectorAll("thead th"));
+
+              // Find columns to keep
+              const keepIndexes = [];
+              headers.forEach((th, i) => {
+                if (allowed.some(a => th.innerText.includes(a))) {
+                  keepIndexes.push(i);
+                }
+              });
+
+              // Remove unwanted header columns
+              headers.forEach((th, i) => {
+                if (!keepIndexes.includes(i)) th.remove();
+              });
+
+              // Process rows
+              const rows = table.querySelectorAll("tbody tr");
+
+              rows.forEach(row => {
+                const cells = Array.from(row.querySelectorAll("td"));
+
+                // Remove unwanted columns
+                cells.forEach((td, i) => {
+                  if (!keepIndexes.includes(i)) td.remove();
+                });
+
+                const updatedCell = row.querySelector("td:last-child");
+                if (!updatedCell) {
+                  row.remove();
+                  return;
+                }
+
+                const date = new Date(updatedCell.innerText.trim());
+
+                if (isNaN(date.getTime()) || date < threshold) {
+                  row.remove();
+                }
+              });
+            }, threshold.toISOString());
+
+            await page.waitForTimeout(2000);
+
+            await page.locator("table").screenshot({
+              path: "screenshot.png"
+            });
 
             if (!fs.existsSync("screenshot.png")) {
               throw new Error("Screenshot not created");
@@ -53,5 +124,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: screenshot
-          path: screenshot.png
+          name: filtered-screenshot
+          path: |
+            screenshot.png
+            debug.png
