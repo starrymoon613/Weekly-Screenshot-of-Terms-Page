@@ -1,5 +1,5 @@
 
-name: CV Screenshot (Safe)
+name: CV Screenshot (Filtered Stable)
 
 on:
   workflow_dispatch:
@@ -9,11 +9,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
 
@@ -23,49 +21,97 @@ jobs:
           npm install playwright
           npx playwright install --with-deps
 
-      - name: Take screenshot (NO filtering)
+      - name: Run script
         run: |
           cat << 'EOF' > script.js
-          const { chromium } = require("playwright");
-          const fs = require("fs");
+
 
           (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage();
+
+            await page.goto("https://cv.hres.ca/en/terms/15", {
+              timeout: 60000
+            });
+
+            await page.waitForTimeout(8000);
+
+            // ✅ SAFE FILTER (will not crash)
             try {
-              const browser = await chromium.launch();
-              const page = await browser.newPage();
+              await page.evaluate(() => {
+                const table = document.querySelector("table");
+                if (!table) return;
 
-              await page.goto("https://cv.hres.ca/en/terms/15", {
-                timeout: 60000
+                const allowed = [
+                  "Code",
+                  "English display name",
+                  "French display name",
+                  "Source Status",
+                  "Last updated"
+                ];
+
+                const headers = Array.from(table.querySelectorAll("thead th"));
+
+                // keep only target columns
+                const keep = [];
+                headers.forEach((h, i) => {
+                  if (allowed.some(a => h.innerText.includes(a))) {
+                    keep.push(i);
+                  }
+                });
+
+                headers.forEach((h, i) => {
+                  if (!keep.includes(i)) h.remove();
+                });
+
+                const rows = table.querySelectorAll("tbody tr");
+
+                // last 4 days
+                const threshold = new Date();
+                threshold.setDate(threshold.getDate() - 4);
+
+                rows.forEach(row => {
+                  const cells = Array.from(row.querySelectorAll("td"));
+
+                  cells.forEach((td, i) => {
+                    if (!keep.includes(i)) td.remove();
+                  });
+
+                  const last = row.querySelector("td:last-child");
+                  if (!last) return;
+
+                  const text = last.innerText.trim();
+
+                  let d = new Date(text);
+                  if (isNaN(d)) return; // don't crash
+
+                  if (d < threshold) {
+                    row.remove();
+                  }
+                });
               });
+            } catch (e) {
+              console.log("Filtering skipped (safe mode)");
+            }
 
-              await page.waitForTimeout(8000);
-
+            // ✅ Always take screenshot
+            await page.locator("table").screenshot({
+              path: "screenshot.png"
+            }).catch(async () => {
               await page.screenshot({
                 path: "screenshot.png",
                 fullPage: true
               });
+            });
 
-              console.log("✅ Screenshot created");
-
-              await browser.close();
-
-            } catch (err) {
-              console.log("ERROR:", err);
-
-              // fallback screenshot
-              const browser = await chromium.launch();
-              const page = await browser.newPage();
-              await page.goto("https://cv.hres.ca/en/terms/15");
-              await page.screenshot({ path: "screenshot.png", fullPage: true });
-              await browser.close();
-            }
+            await browser.close();
           })();
           EOF
 
           node script.js
 
-      - name: Upload artifact
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: screenshot
+          name: filtered-result
           path: screenshot.png
