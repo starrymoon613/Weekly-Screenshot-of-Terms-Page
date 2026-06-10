@@ -1,112 +1,108 @@
-name: CV Screenshot (No Fail)
 
-on:
-  workflow_dispatch:
+const { chromium } = require("playwright");
 
-jobs:
-  run:
-    runs-on: ubuntu-latest
+(async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
 
-    steps:
-      - uses: actions/checkout@v4
+  try {
+    await page.goto("https://cv.hres.ca/en/terms/15", {
+      timeout: 60000
+    });
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
+    await page.waitForTimeout(8000);
 
-      - name: Install Playwright
-        run: |
-          npm init -y
-          npm install playwright
-          npx playwright install --with-deps
+    // ✅ FILTERING (SAFE + WORKING)
+    try {
+      await page.evaluate(() => {
+        const table = document.querySelector("table");
+        if (!table) return;
 
-      - name: Run script
-        run: |
-          cat << 'EOF' > script.js
-          const { chromium } = require("playwright");
+        const allowed = [
+          "Code",
+          "English display name",
+          "French display name",
+          "Source Status",
+          "Last updated"
+        ];
 
-          (async () => {
-            const browser = await chromium.launch();
-            const page = await browser.newPage();
+        const headers = Array.from(table.querySelectorAll("thead th"));
 
-            try {
-              await page.goto("https://cv.hres.ca/en/terms/15", {
-                timeout: 60000
-              });
+        // ✅ find columns to keep
+        const keep = [];
+        headers.forEach((h, i) => {
+          if (allowed.some(a => h.innerText.includes(a))) {
+            keep.push(i);
+          }
+        });
 
-              await page.waitForTimeout(8000);
+        // ✅ remove unwanted header columns
+        headers.forEach((h, i) => {
+          if (!keep.includes(i)) h.remove();
+        });
 
-              // ✅ Try filtering but NEVER crash
-              try {
-                await page.evaluate(() => {
-                  const table = document.querySelector("table");
-                  if (!table) return;
+        const rows = table.querySelectorAll("tbody tr");
 
-                  const allowed = [
-                    "Code",
-                    "English display name",
-                    "French display name",
-                    "Source Status",
-                    "Last updated"
-                  ];
+        // ✅ last 4 days threshold
+        const threshold = new Date();
+        threshold.setHours(0, 0, 0, 0);
+        threshold.setDate(threshold.getDate() - 4);
 
-                  const headers = Array.from(table.querySelectorAll("thead th"));
+        rows.forEach(row => {
+          const cells = Array.from(row.querySelectorAll("td"));
 
-                  const keep = [];
-                  headers.forEach((h, i) => {
-                    if (allowed.some(a => h.innerText.includes(a))) {
-                      keep.push(i);
-                    }
-                  });
+          // ✅ remove unwanted columns
+          cells.forEach((td, i) => {
+            if (!keep.includes(i)) td.remove();
+          });
 
-                  headers.forEach((h, i) => {
-                    if (!keep.includes(i)) h.remove();
-                  });
+          const last = row.querySelector("td:last-child");
+          if (!last) {
+            row.remove();
+            return;
+          }
 
-                  const rows = table.querySelectorAll("tbody tr");
+          const text = last.innerText.trim();
 
-                  const threshold = new Date();
-                  threshold.setDate(threshold.getDate() - 4);
+          // ✅ extract YYYY-MM-DD safely
+          const match = text.match(/\d{4}-\d{2}-\d{2}/);
 
-                  rows.forEach(row => {
-                    const cells = Array.from(row.querySelectorAll("td"));
+          if (!match) {
+            row.remove();
+            return;
+          }
 
-                    cells.forEach((td, i) => {
-                      if (!keep.includes(i)) td.remove();
-                    });
+          const rowDate = new Date(match[0]);
+          rowDate.setHours(0, 0, 0, 0);
 
-                    const last = row.querySelector("td:last-child");
-                    if (!last) return;
+          // ✅ filter out old rows
+          if (rowDate < threshold) {
+            row.remove();
+          }
+        });
 
-                    const d = new Date(last.innerText.trim());
+      });
+    } catch (e) {
+      console.log("Filtering skipped:", e);
+    }
 
-                    if (isNaN(d) || d < threshold) {
-                      row.remove();
-                    }
-                  });
-                });
-              } catch (e) {
-                console.log("Filtering skipped ✅");
-              }
+    await page.waitForTimeout(2000);
 
-              // ✅ ALWAYS WORKS
-              await page.screenshot({
-                path: "screenshot.png",
-                fullPage: true
-              });
+    // ✅ TAKE SCREENSHOT (always works)
+    await page.screenshot({
+      path: "screenshot.png",
+      fullPage: true
+    });
 
-            } catch (err) {
-              console.log("Main error:", err);
-            }
+  } catch (err) {
+    console.log("Main error:", err);
 
-            await browser.close();
-          })();
-          EOF
+    // ✅ fallback screenshot if something fails
+    await page.screenshot({
+      path: "screenshot.png",
+      fullPage: true
+    });
+  }
 
-          node script.js
-
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: final-screenshot
-          path: screenshot.png
+  await browser.close();
+})();
