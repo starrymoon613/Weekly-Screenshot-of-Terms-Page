@@ -1,5 +1,5 @@
 
-name: CV Screenshot (Filtered)
+name: CV Screenshot (Safe)
 
 on:
   workflow_dispatch:
@@ -23,89 +23,49 @@ jobs:
           npm install playwright
           npx playwright install --with-deps
 
-      - name: Run script
+      - name: Take screenshot (NO filtering)
         run: |
           cat << 'EOF' > script.js
           const { chromium } = require("playwright");
           const fs = require("fs");
 
           (async () => {
-            const browser = await chromium.launch();
-            const page = await browser.newPage();
-
-            await page.goto("https://cv.hres.ca/en/terms/15");
-            await page.waitForTimeout(8000);
-
             try {
-              await page.evaluate(() => {
-                const table = document.querySelector("table");
-                if (!table) return;
+              const browser = await chromium.launch();
+              const page = await browser.newPage();
 
-                const allowed = [
-                  "Code",
-                  "English display name",
-                  "French display name",
-                  "Source Status",
-                  "Last updated"
-                ];
-
-                const headers = Array.from(table.querySelectorAll("thead th"));
-
-                // find columns to keep
-                const keepIndexes = [];
-                headers.forEach((th, i) => {
-                  if (allowed.some(a => th.innerText.includes(a))) {
-                    keepIndexes.push(i);
-                  }
-                });
-
-                // remove extra columns
-                headers.forEach((th, i) => {
-                  if (!keepIndexes.includes(i)) th.remove();
-                });
-
-                const rows = table.querySelectorAll("tbody tr");
-
-                const threshold = new Date();
-                threshold.setDate(threshold.getDate() - 4);
-
-                rows.forEach(row => {
-                  const cells = Array.from(row.querySelectorAll("td"));
-
-                  cells.forEach((td, i) => {
-                    if (!keepIndexes.includes(i)) td.remove();
-                  });
-
-                  const last = row.querySelector("td:last-child");
-                  if (!last) return row.remove();
-
-                  const d = new Date(last.innerText.trim());
-
-                  if (isNaN(d) || d < threshold) {
-                    row.remove();
-                  }
-                });
+              await page.goto("https://cv.hres.ca/en/terms/15", {
+                timeout: 60000
               });
-            } catch (e) {
-              console.log("Filtering failed, continuing...");
-            }
 
-            await page.waitForTimeout(2000);
+              await page.waitForTimeout(8000);
 
-            await page.screenshot({ path: "screenshot.png", fullPage: false });
+              await page.screenshot({
+                path: "screenshot.png",
+                fullPage: true
+              });
 
-            if (!fs.existsSync("screenshot.png")) {
+              console.log("✅ Screenshot created");
+
+              await browser.close();
+
+            } catch (err) {
+              console.log("ERROR:", err);
+
+              // fallback screenshot
+              const browser = await chromium.launch();
+              const page = await browser.newPage();
+              await page.goto("https://cv.hres.ca/en/terms/15");
               await page.screenshot({ path: "screenshot.png", fullPage: true });
+              await browser.close();
             }
-
-            await browser.close();
           })();
           EOF
 
           node script.js
 
-      - name: Upload screenshot
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: result
+          name: screenshot
           path: screenshot.png
