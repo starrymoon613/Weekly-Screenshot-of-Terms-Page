@@ -1,115 +1,34 @@
-name: Terms15 Table Capture (Last 5 Days)
+
+name: Capture CV Screenshot
 
 on:
-  schedule:
-    - cron: "0 13 * * *"
   workflow_dispatch:
-
-permissions:
-  contents: write
+  schedule:
+    - cron: "0 10 * * *" # runs daily at 10 UTC
 
 jobs:
-  capture:
+  screenshot:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Node
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install system dependencies
+      - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2
+          npm install
+          npx playwright install --with-deps
 
-      - name: Install Puppeteer
-        run: npm install puppeteer
+      - name: Run screenshot script
+        run: node screenshot.js
 
-      - name: Ensure folders exist
-        run: |
-          mkdir -p screenshots
-          mkdir -p logs
-
-      - name: Capture table screenshot + extract last 5 days
-        run: |
-          node << 'EOF'
-          const puppeteer = require('puppeteer');
-          const fs = require('fs');
-
-          (async () => {
-            try {
-              const browser = await puppeteer.launch({
-                headless: "new",
-                args: ["--no-sandbox", "--disable-setuid-sandbox"]
-              });
-
-              const page = await browser.newPage();
-              await page.goto("https://cv.hres.ca/en/terms/15", { waitUntil: "networkidle2" });
-
-              // Wait for table to load
-              await page.waitForSelector("table tbody tr", { timeout: 15000 });
-
-              // Sort by Last Updated using DataTables API
-              await page.evaluate(() => {
-                if (window.jQuery && window.jQuery.fn.dataTable) {
-                  const table = window.jQuery("table").DataTable();
-                  table.order([3, "desc"]).draw(); // column index 3 = Last updated
-                }
-              });
-
-              await page.waitForTimeout(1500);
-
-              // Extract last 5 days
-              const fiveDaysAgo = new Date();
-              fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
-
-              const entries = await page.evaluate((cutoff) => {
-                const rows = [...document.querySelectorAll("table tbody tr")];
-                return rows
-                  .map(row => {
-                    const cols = [...row.querySelectorAll("td")].map(td => td.textContent.trim());
-                    const dateText = cols[cols.length - 1];
-                    const parsed = new Date(dateText);
-                    return { cols, parsed };
-                  })
-                  .filter(r => r.parsed >= new Date(cutoff))
-                  .map(r => r.cols);
-              }, fiveDaysAgo.toISOString());
-
-              const timestamp = new Date().toISOString().split("T")[0];
-
-              // Save JSON log
-              fs.writeFileSync(`logs/entries_${timestamp}.json`, JSON.stringify(entries, null, 2));
-
-              // Screenshot table safely
-              const table = await page.$("table");
-              if (table) {
-                await table.screenshot({ path: `screenshots/table_${timestamp}.png` });
-              } else {
-                fs.writeFileSync(`logs/error_${timestamp}.txt`, "Table not found");
-              }
-
-              await browser.close();
-            } catch (err) {
-              fs.writeFileSync("logs/error_runtime.txt", err.toString());
-            }
-          })();
-          EOF
-
-      - name: Delete files older than 5 days
-        run: |
-          find screenshots -type f -mtime +5 -delete
-          find logs -type f -mtime +5 -delete
-
-      - name: Commit changes
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add screenshots/*.png logs/*.json logs/*.txt
-          git add -u screenshots logs
-          git commit -m "Daily table screenshot + last 5 days entries" || echo "No changes to commit"
-          git push
+      - name: Upload screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: cv-screenshot
+          path: screenshot.png
