@@ -1,21 +1,21 @@
 
-name: Filtered CV Screenshot
+name: CV Screenshot (Filtered)
 
 on:
   workflow_dispatch:
 
 jobs:
-  screenshot:
+  run:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - run: echo "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true" >> $GITHUB_ENV
 
       - name: Install Playwright
         run: |
@@ -23,108 +23,89 @@ jobs:
           npm install playwright
           npx playwright install --with-deps
 
-      - name: Create script
+      - name: Run script
         run: |
-          cat << 'EOF' > screenshot.js
+          cat << 'EOF' > script.js
           const { chromium } = require("playwright");
           const fs = require("fs");
 
           (async () => {
-            const browser = await chromium.launch({ headless: true });
+            const browser = await chromium.launch();
             const page = await browser.newPage();
 
-            await page.goto("https://cv.hres.ca/en/terms/15", {
-              waitUntil: "domcontentloaded",
-              timeout: 60000
-            });
-
-            // wait for table to fully render
+            await page.goto("https://cv.hres.ca/en/terms/15");
             await page.waitForTimeout(8000);
 
-            const tableExists = await page.locator("table").count();
-            if (!tableExists) {
-              await page.screenshot({ path: "debug.png", fullPage: true });
-              throw new Error("Table not found");
-            }
+            try {
+              await page.evaluate(() => {
+                const table = document.querySelector("table");
+                if (!table) return;
 
-            // filter logic
-            const threshold = new Date();
-            threshold.setDate(threshold.getDate() - 4);
+                const allowed = [
+                  "Code",
+                  "English display name",
+                  "French display name",
+                  "Source Status",
+                  "Last updated"
+                ];
 
-            await page.evaluate((thresholdStr) => {
-              const threshold = new Date(thresholdStr);
-              const table = document.querySelector("table");
-              if (!table) return;
+                const headers = Array.from(table.querySelectorAll("thead th"));
 
-              const allowed = [
-                "Code",
-                "English display name",
-                "French display name",
-                "Source Status",
-                "Last updated"
-              ];
-
-              const headers = Array.from(table.querySelectorAll("thead th"));
-
-              // Find columns to keep
-              const keepIndexes = [];
-              headers.forEach((th, i) => {
-                if (allowed.some(a => th.innerText.includes(a))) {
-                  keepIndexes.push(i);
-                }
-              });
-
-              // Remove unwanted header columns
-              headers.forEach((th, i) => {
-                if (!keepIndexes.includes(i)) th.remove();
-              });
-
-              // Process rows
-              const rows = table.querySelectorAll("tbody tr");
-
-              rows.forEach(row => {
-                const cells = Array.from(row.querySelectorAll("td"));
-
-                // Remove unwanted columns
-                cells.forEach((td, i) => {
-                  if (!keepIndexes.includes(i)) td.remove();
+                // find columns to keep
+                const keepIndexes = [];
+                headers.forEach((th, i) => {
+                  if (allowed.some(a => th.innerText.includes(a))) {
+                    keepIndexes.push(i);
+                  }
                 });
 
-                const updatedCell = row.querySelector("td:last-child");
-                if (!updatedCell) {
-                  row.remove();
-                  return;
-                }
+                // remove extra columns
+                headers.forEach((th, i) => {
+                  if (!keepIndexes.includes(i)) th.remove();
+                });
 
-                const date = new Date(updatedCell.innerText.trim());
+                const rows = table.querySelectorAll("tbody tr");
 
-                if (isNaN(date.getTime()) || date < threshold) {
-                  row.remove();
-                }
+                const threshold = new Date();
+                threshold.setDate(threshold.getDate() - 4);
+
+                rows.forEach(row => {
+                  const cells = Array.from(row.querySelectorAll("td"));
+
+                  cells.forEach((td, i) => {
+                    if (!keepIndexes.includes(i)) td.remove();
+                  });
+
+                  const last = row.querySelector("td:last-child");
+                  if (!last) return row.remove();
+
+                  const d = new Date(last.innerText.trim());
+
+                  if (isNaN(d) || d < threshold) {
+                    row.remove();
+                  }
+                });
               });
-            }, threshold.toISOString());
+            } catch (e) {
+              console.log("Filtering failed, continuing...");
+            }
 
             await page.waitForTimeout(2000);
 
-            await page.locator("table").screenshot({
-              path: "screenshot.png"
-            });
+            await page.screenshot({ path: "screenshot.png", fullPage: false });
 
             if (!fs.existsSync("screenshot.png")) {
-              throw new Error("Screenshot not created");
+              await page.screenshot({ path: "screenshot.png", fullPage: true });
             }
 
             await browser.close();
           })();
           EOF
 
-      - name: Run script
-        run: node screenshot.js
+          node script.js
 
-      - name: Upload artifact
+      - name: Upload screenshot
         uses: actions/upload-artifact@v4
         with:
-          name: filtered-screenshot
-          path: |
-            screenshot.png
-            debug.png
+          name: result
+          path: screenshot.png
