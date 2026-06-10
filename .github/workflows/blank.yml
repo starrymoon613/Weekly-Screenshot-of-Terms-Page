@@ -1,0 +1,57 @@
+
+name: Screenshot
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Enable Node 24
+        run: echo "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true" >> $GITHUB_ENV
+
+      - name: Install Playwright
+        run: |
+          npm init -y
+          npm install playwright
+          npx playwright install --with-deps
+
+      - name: Create script
+        run: |
+          cat << 'EOF' > screenshot.js
+          const { chromium } = require("playwright");
+          const fs = require("fs");
+
+          (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage();
+
+            await page.goto("https://cv.hres.ca/en/terms/15");
+            await page.waitForTimeout(8000);
+
+            await page.screenshot({ path: "screenshot.png", fullPage: true });
+
+            if (!fs.existsSync("screenshot.png")) {
+              throw new Error("Screenshot not created");
+            }
+
+            await browser.close();
+          })();
+          EOF
+
+      - name: Run script
+        run: node screenshot.js
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot
+          path: screenshot.png
