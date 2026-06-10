@@ -1,5 +1,5 @@
 
-name: Capture CV Screenshot
+name: CV Screenshot
 
 on:
   workflow_dispatch:
@@ -22,14 +22,118 @@ jobs:
 
       - name: Install dependencies
         run: |
-          npm install
+          npm init -y
+          npm install playwright
           npx playwright install --with-deps
 
-      - name: Run screenshot script
+      - name: Create script file
+        run: |
+          cat << 'EOF' > screenshot.js
+          const { chromium } = require("playwright");
+          const fs = require("fs");
+
+          (async () => {
+            console.log("Starting browser...");
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage();
+
+            console.log("Opening page...");
+            await page.goto("https://cv.hres.ca/en/terms/15", {
+              waitUntil: "domcontentloaded",
+              timeout: 60000
+            });
+
+            console.log("Waiting for content...");
+            await page.waitForTimeout(8000);
+
+            const tableCount = await page.locator("table").count();
+            console.log("Tables found:", tableCount);
+
+            if (tableCount === 0) {
+              await page.screenshot({ path: "debug-fullpage.png", fullPage: true });
+              throw new Error("No table found!");
+            }
+
+            console.log("Filtering data...");
+            const threshold = new Date();
+            threshold.setDate(threshold.getDate() - 4);
+
+            await page.evaluate((thresholdStr) => {
+              const threshold = new Date(thresholdStr);
+              const table = document.querySelector("table");
+              if (!table) return;
+
+              const headers = Array.from(table.querySelectorAll("thead th"));
+
+              const allowed = [
+                "Code",
+                "English display name",
+                "French display name",
+                "Source Status",
+                "Last updated"
+              ];
+
+              const keepIndexes = [];
+              headers.forEach((th, i) => {
+                if (allowed.some(a => th.innerText.includes(a))) {
+                  keepIndexes.push(i);
+                }
+              });
+
+              headers.forEach((th, i) => {
+                if (!keepIndexes.includes(i)) th.remove();
+              });
+
+              const rows = table.querySelectorAll("tbody tr");
+
+              rows.forEach(row => {
+                const cells = Array.from(row.querySelectorAll("td"));
+
+                cells.forEach((td, i) => {
+                  if (!keepIndexes.includes(i)) td.remove();
+                });
+
+                const updatedCell = row.querySelector("td:last-child");
+                if (!updatedCell) {
+                  row.remove();
+                  return;
+                }
+
+                const date = new Date(updatedCell.innerText.trim());
+
+                if (isNaN(date) || date < threshold) {
+                  row.remove();
+                }
+              });
+            }, threshold.toISOString());
+
+            console.log("Taking screenshot...");
+            await page.waitForTimeout(2000);
+
+            await page.locator("table").screenshot({
+              path: "screenshot.png"
+            });
+
+            if (fs.existsSync("screenshot.png")) {
+              console.log("✅ Screenshot created");
+            } else {
+              throw new Error("❌ Screenshot missing");
+            }
+
+            await browser.close();
+          })();
+          EOF
+
+      - name: Run script
         run: node screenshot.js
+
+      - name: List files (debug)
+        run: ls -lah
 
       - name: Upload screenshot
         uses: actions/upload-artifact@v4
         with:
           name: cv-screenshot
-          path: screenshot.png
+          path: |
+            screenshot.png
+            debug-fullpage.png
