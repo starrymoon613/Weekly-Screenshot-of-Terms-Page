@@ -1,61 +1,91 @@
 
-name: CV Screenshot
+const { chromium } = require("playwright");
 
-on: workflow_dispatch
+(async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
 
-jobs:
-  screenshot:
-    runs-on: ubuntu-latest
+  await page.goto("https://cv.hres.ca/en/terms/15", {
+    waitUntil: "domcontentloaded",
+  });
 
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+  // Wait longer + retry safety
+  await page.waitForTimeout(5000);
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
+  // Ensure table exists
+  const tableExists = await page.locator("table").count();
+  if (!tableExists) {
+    throw new Error("Table not found on page");
+  }
 
-      - name: Enable Node 24 for actions
-        run: echo "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true" >> $GITHUB_ENV
+  // Set threshold (last 4 days)
+  const threshold = new Date();
+  threshold.setDate(threshold.getDate() - 4);
 
-      - name: Install dependencies
-        run: |
-          npm init -y
-          npm install playwright
-          npx playwright install --with-deps
+  await page.evaluate((thresholdStr) => {
+    const threshold = new Date(thresholdStr);
 
-      - name: Create script
-        run: |
-          cat << 'EOF' > screenshot.js
-          const { chromium } = require("playwright");
-          const fs = require("fs");
+    const table = document.querySelector("table");
+    if (!table) return;
 
-          (async () => {
-            const browser = await chromium.launch();
-            const page = await browser.newPage();
+    const headers = Array.from(table.querySelectorAll("thead th"));
 
-            await page.goto("https://cv.hres.ca/en/terms/15");
-            await page.waitForTimeout(8000);
+    const allowed = [
+      "Code",
+      "English display name",
+      "French display name",
+      "Source Status",
+      "Last updated",
+    ];
 
-            await page.locator("body").screenshot({ path: "screenshot.png", fullPage: true });
+    // Map column names → indices
+    const keepIndexes = [];
+    headers.forEach((th, i) => {
+      if (allowed.some(a => th.innerText.includes(a))) {
+        keepIndexes.push(i);
+      }
+    });
 
-            if (!fs.existsSync("screenshot.png")) {
-              throw new Error("Screenshot not created");
-            }
+    // Remove unwanted header columns
+    headers.forEach((th, i) => {
+      if (!keepIndexes.includes(i)) th.remove();
+    });
 
-            await browser.close();
-          })();
-          EOF
+    const rows = table.querySelectorAll("tbody tr");
 
-      - name: Run script
-        run: node screenshot.js
+    rows.forEach((row) => {
+      const cells = Array.from(row.querySelectorAll("td"));
 
-      - name: List files
-        run: ls -lah
+      // Remove unwanted columns
+      cells.forEach((td, i) => {
+        if (!keepIndexes.includes(i)) td.remove();
+      });
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cv-screenshot
-          path: screenshot.png
+      const updatedCell = row.querySelector("td:last-child");
+      if (!updatedCell) {
+        row.remove();
+        return;
+      }
+
+      const text = updatedCell.innerText.trim();
+
+      // Safer parsing
+      const date = new Date(text);
+
+      if (isNaN(date.getTime()) || date < threshold) {
+        row.remove();
+      }
+    });
+  }, threshold.toISOString());
+
+  // Give time for DOM changes
+  await page.waitForTimeout(2000);
+
+  const table = page.locator("table");
+
+  await table.screenshot({
+    path: "screenshot.png",
+  });
+
+  await browser.close();
+})();
