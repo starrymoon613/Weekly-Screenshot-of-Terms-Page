@@ -1,18 +1,63 @@
-name: Screenshot Test
+name: Screenshot CV Terms
 
 on:
   workflow_dispatch:
 
 jobs:
-  test:
+  screenshot:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Create test file
-        run: echo "hello" > test.txt
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Playwright
+        run: |
+          npm init -y
+          npm install playwright
+          npx playwright install --with-deps
+
+      - name: Take screenshot
+        run: |
+          node << 'EOF'
+          const { chromium } = require('playwright');
+
+          (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage();
+
+            await page.goto('https://cv.hres.ca/en/terms/15', {
+              waitUntil: 'domcontentloaded',
+              timeout: 0
+            });
+
+            await page.waitForSelector('table');
+
+            // ✅ sort newest
+            await page.click('th:has-text("Last updated")');
+            await page.waitForTimeout(1000);
+            await page.click('th:has-text("Last updated")');
+
+            await page.waitForTimeout(3000);
+
+            // ✅ take screenshot (table only)
+            const table = page.locator('table');
+            await table.screenshot({ path: 'terms_latest.png' });
+
+            await browser.close();
+          })();
+          EOF
+
+      - name: Verify file
+        run: ls -l
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: test-file
-          path: test.txt
+          name: terms-screenshot
+          path: terms_latest.png
