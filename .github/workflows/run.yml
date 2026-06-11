@@ -1,4 +1,4 @@
-name: Screenshot CV Terms (Last 5 Days)
+name: Screenshot CV Terms (Clean Table Only)
 
 permissions:
   contents: write
@@ -27,7 +27,7 @@ jobs:
           npm install playwright
           npx playwright install --with-deps
 
-      - name: Capture screenshot (last 5 days only)
+      - name: Capture screenshot (clean + fast)
         run: |
           node << 'EOF'
           const { chromium } = require('playwright');
@@ -36,30 +36,36 @@ jobs:
             const browser = await chromium.launch({ headless: true });
             const page = await browser.newPage();
 
-            // ✅ retry loading the page
-            for (let i = 0; i < 3; i++) {
-              try {
-                await page.goto('https://cv.hres.ca/en/terms/15', {
-                  waitUntil: 'domcontentloaded',
-                  timeout: 120000
-                });
-                break;
-              } catch (e) {
-                console.log(`Retry ${i + 1}`);
-                if (i === 2) throw e;
+            // ✅ BLOCK heavy resources (fix timeout)
+            await page.route('**/*', (route) => {
+              const url = route.request().url();
+              if (
+                url.match(/\.(png|jpg|jpeg|gif|svg|css)$/) ||
+                url.includes('fonts') ||
+                url.includes('analytics')
+              ) {
+                return route.abort();
               }
-            }
+              return route.continue();
+            });
+
+            // ✅ load page (no timeout)
+            await page.goto('https://cv.hres.ca/en/terms/15', {
+              waitUntil: 'domcontentloaded',
+              timeout: 0
+            });
 
             // ✅ wait for table
             await page.waitForSelector('table', { timeout: 60000 });
 
-            // ✅ sort by "Last updated" (newest first)
+            // ✅ sort newest (double click to ensure descending)
             await page.click('th:has-text("Last updated")');
             await page.waitForTimeout(1000);
             await page.click('th:has-text("Last updated")');
+
             await page.waitForTimeout(3000);
 
-            // ✅ filter to last 5 days ONLY
+            // ✅ filter last 5 days
             const cutoff = new Date();
             cutoff.setDate(cutoff.getDate() - 5);
 
@@ -79,9 +85,23 @@ jobs:
               });
             }, cutoff.toISOString());
 
-            // ✅ screenshot only table
-            const table = await page.locator('table');
-            await table.screenshot({ path: 'terms_latest.png' });
+            // ✅ remove ALL non-table UI (header/footer/banners)
+            await page.evaluate(() => {
+              const elements = Array.from(document.body.children);
+
+              elements.forEach(el => {
+                if (!el.querySelector('table') && el.tagName !== 'TABLE') {
+                  el.style.display = 'none';
+                }
+              });
+
+              document.body.style.margin = '0';
+            });
+
+            // ✅ screenshot ONLY table (perfect crop)
+            await page.locator('table').screenshot({
+              path: 'terms_latest.png'
+            });
 
             await browser.close();
           })();
@@ -93,7 +113,7 @@ jobs:
           git config user.email "actions@github.com"
 
           git add terms_latest.png
-          git commit -m "Update last 5 days screenshot" || echo "No changes"
+          git commit -m "Update clean table screenshot" || echo "No changes"
 
           git pull --rebase || echo "Nothing to pull"
           git push || echo "Nothing to push"
