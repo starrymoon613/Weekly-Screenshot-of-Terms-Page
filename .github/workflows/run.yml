@@ -14,50 +14,34 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Playwright
-        run: |
-          npm init -y
-          npm install playwright
-          npx playwright install --with-deps
+      - run: npm init -y
+      - run: npm install playwright
+      - run: npx playwright install --with-deps
 
-      - name: Create screenshot script
-        run: |
-          cat << 'EOF' > screenshot.js
-          const { chromium } = require('playwright');
+      # ✅ Write JS file safely (NO YAML BREAKING)
+      - run: |
+          echo "const { chromium } = require('playwright');" > script.js
+          echo "(async () => {" >> script.js
+          echo "const browser = await chromium.launch();" >> script.js
+          echo "const page = await browser.newPage();" >> script.js
+          echo "await page.goto('https://cv.hres.ca/en/terms/15', { waitUntil: 'domcontentloaded', timeout: 0 });" >> script.js
+          echo "await page.waitForSelector('table');" >> script.js
+          echo "await page.click('th:has-text(\"Last updated\")');" >> script.js
+          echo "await page.waitForTimeout(1000);" >> script.js
+          echo "await page.click('th:has-text(\"Last updated\")');" >> script.js
+          echo "await page.waitForTimeout(3000);" >> script.js
+          echo "await page.locator('table').screenshot({ path: 'terms_latest.png' });" >> script.js
+          echo "await browser.close();" >> script.js
+          echo "})();" >> script.js
 
-          (async () => {
-            const browser = await chromium.launch();
-            const page = await browser.newPage();
+      # ✅ Run it
+      - run: node script.js
 
-            await page.goto('https://cv.hres.ca/en/terms/15', {
-              waitUntil: 'domcontentloaded',
-              timeout: 0
-            });
+      # ✅ Confirm file exists
+      - run: ls -l
 
-            await page.waitForSelector('table');
-
-            await page.click('th:has-text("Last updated")');
-            await page.waitForTimeout(1000);
-            await page.click('th:has-text("Last updated")');
-
-            await page.waitForTimeout(3000);
-
-            const table = page.locator('table');
-            await table.screenshot({ path: 'terms_latest.png' });
-
-            await browser.close();
-          })();
-          EOF
-
-      - name: Run screenshot script
-        run: node screenshot.js
-
-      - name: Check file exists
-        run: ls -l
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      # ✅ Upload artifact (THIS is what you want)
+      - uses: actions/upload-artifact@v4
         with:
           name: terms-screenshot
           path: terms_latest.png
-``
