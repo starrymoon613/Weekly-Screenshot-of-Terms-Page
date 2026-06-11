@@ -27,42 +27,39 @@ jobs:
           const { chromium } = require('playwright');
 
           (async () => {
-            const browser = await chromium.launch();
-            const page = await browser.newPage();
-
-            await page.goto('https://cv.hres.ca/en/terms/15', {
-              waitUntil: 'networkidle',
-              timeout: 0
+            const browser = await chromium.launch({
+              args: ['--no-sandbox', '--disable-setuid-sandbox']
             });
 
-            await page.waitForSelector('table');
+            const page = await browser.newPage();
 
-            // ✅ toggle "Last updated" to newest first
+            // ✅ Retry loading (fix timeout)
+            let loaded = false;
+            for (let i = 0; i < 3; i++) {
+              try {
+                await page.goto('https://cv.hres.ca/en/terms/15', {
+                  waitUntil: 'domcontentloaded',
+                  timeout: 60000
+                });
+                loaded = true;
+                break;
+              } catch (e) {
+                console.log('Retry loading page...');
+              }
+            }
+
+            if (!loaded) throw new Error('Page failed to load');
+
+            // ✅ Wait only for table
+            await page.waitForSelector('table', { timeout: 60000 });
+
+            // ✅ Click toggle to get newest first
             const header = page.locator('th:has-text("Last updated")');
             await header.click();
             await page.waitForTimeout(1500);
             await header.click();
 
-            // ✅ wait for sort to apply
-            await page.waitForTimeout(4000);
+            // ✅ Let sorting finish
+            await page.waitForTimeout(3000);
 
-            // ✅ screenshot ONLY table
-            await page.locator('table').screenshot({
-              path: 'terms_latest.png'
-            });
-
-            await browser.close();
-          })();
-          EOF
-
-      - name: Run script
-        run: node script.js
-
-      - name: Verify file
-        run: ls -l
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: terms-screenshot
-          path: terms_latest.png
+            // ✅ Screenshot TABLE ONLY (no header/footer)
