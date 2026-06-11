@@ -1,4 +1,3 @@
-
 const { chromium } = require("playwright");
 
 (async () => {
@@ -10,94 +9,100 @@ const { chromium } = require("playwright");
       timeout: 60000
     });
 
-    await page.waitForTimeout(8000);
+    await page.waitForSelector("table");
 
-    // ✅ FILTERING (SAFE + WORKING)
-    try {
-      await page.evaluate(() => {
-        const table = document.querySelector("table");
-        if (!table) return;
+    // ✅ FILTER + CLEAN TABLE
+    await page.evaluate(() => {
+      const table = document.querySelector("table");
+      if (!table) return;
 
-        const allowed = [
-          "Code",
-          "English display name",
-          "French display name",
-          "Source Status",
-          "Last updated"
-        ];
+      // ✅ CORRECT column names
+      const allowed = [
+        "Code",
+        "English Display Name",
+        "French Display Name",
+        "Source",
+        "Status",
+        "Last updated"
+      ];
 
-        const headers = Array.from(table.querySelectorAll("thead th"));
+      const headers = Array.from(table.querySelectorAll("thead th"));
 
-        // ✅ find columns to keep
-        const keep = [];
-        headers.forEach((h, i) => {
-          if (allowed.some(a => h.innerText.includes(a))) {
-            keep.push(i);
-          }
-        });
+      // map indexes to keep
+      const keepIndexes = [];
 
-        // ✅ remove unwanted header columns
-        headers.forEach((h, i) => {
-          if (!keep.includes(i)) h.remove();
-        });
+      headers.forEach((th, i) => {
+        const text = th.innerText.trim();
 
-        const rows = table.querySelectorAll("tbody tr");
-
-        // ✅ last 4 days threshold
-        const threshold = new Date();
-        threshold.setHours(0, 0, 0, 0);
-        threshold.setDate(threshold.getDate() - 4);
-
-        rows.forEach(row => {
-          const cells = Array.from(row.querySelectorAll("td"));
-
-          // ✅ remove unwanted columns
-          cells.forEach((td, i) => {
-            if (!keep.includes(i)) td.remove();
-          });
-
-          const last = row.querySelector("td:last-child");
-          if (!last) {
-            row.remove();
-            return;
-          }
-
-          const text = last.innerText.trim();
-
-          // ✅ extract YYYY-MM-DD safely
-          const match = text.match(/\d{4}-\d{2}-\d{2}/);
-
-          if (!match) {
-            row.remove();
-            return;
-          }
-
-          const rowDate = new Date(match[0]);
-          rowDate.setHours(0, 0, 0, 0);
-
-          // ✅ filter out old rows
-          if (rowDate < threshold) {
-            row.remove();
-          }
-        });
-
+        if (allowed.some(a => text.includes(a))) {
+          keepIndexes.push(i);
+        }
       });
-    } catch (e) {
-      console.log("Filtering skipped:", e);
-    }
 
-    await page.waitForTimeout(2000);
+      // ✅ remove unwanted header columns
+      headers.forEach((th, i) => {
+        if (!keepIndexes.includes(i)) th.remove();
+      });
 
-    // ✅ TAKE SCREENSHOT (always works)
-    await page.screenshot({
-      path: "screenshot.png",
-      fullPage: true
+      const rows = Array.from(table.querySelectorAll("tbody tr"));
+
+      // ✅ last 4 days threshold
+      const threshold = new Date();
+      threshold.setHours(0, 0, 0, 0);
+      threshold.setDate(threshold.getDate() - 4);
+
+      rows.forEach(row => {
+        const cells = Array.from(row.querySelectorAll("td"));
+
+        // remove unwanted columns
+        cells.forEach((td, i) => {
+          if (!keepIndexes.includes(i)) td.remove();
+        });
+
+        const lastCell = row.querySelector("td:last-child");
+
+        if (!lastCell) {
+          row.remove();
+          return;
+        }
+
+        const match = lastCell.innerText.match(/\d{4}-\d{2}-\d{2}/);
+
+        if (!match) {
+          row.remove();
+          return;
+        }
+
+        const rowDate = new Date(match[0]);
+        rowDate.setHours(0, 0, 0, 0);
+
+        if (rowDate < threshold) {
+          row.remove();
+        }
+      });
+
+      // ✅ Optional: enlarge table for clearer screenshot
+      table.style.fontSize = "16px";
+      table.style.width = "100%";
+
+      // ✅ Remove everything else on page
+      document.body.innerHTML = "";
+      document.body.appendChild(table);
+    });
+
+    // Give layout time to settle
+    await page.waitForTimeout(1000);
+
+    // ✅ Screenshot ONLY table (clean output)
+    const table = page.locator("table");
+
+    await table.screenshot({
+      path: "screenshot.png"
     });
 
   } catch (err) {
-    console.log("Main error:", err);
+    console.log("Error:", err);
 
-    // ✅ fallback screenshot if something fails
     await page.screenshot({
       path: "screenshot.png",
       fullPage: true
