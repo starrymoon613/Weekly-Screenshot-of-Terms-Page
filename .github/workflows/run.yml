@@ -24,7 +24,7 @@ jobs:
 
       - name: Take screenshot
         run: |
-          node << 'EOF'
+          node -e "
           const { chromium } = require('playwright');
 
           (async () => {
@@ -38,25 +38,23 @@ jobs:
 
             await page.waitForSelector('table');
 
-            // ✅ sort newest
-            await page.click('th:has-text("Last updated")');
+            // sort by last updated
+            await page.click('th:has-text(\"Last updated\")');
             await page.waitForTimeout(1000);
-            await page.click('th:has-text("Last updated")');
+            await page.click('th:has-text(\"Last updated\")');
 
             await page.waitForTimeout(3000);
 
-            // ✅ take screenshot (table only)
-            const table = page.locator('table');
-            await table.screenshot({ path: 'terms_latest.png' });
+            await page.screenshot({ path: 'terms_latest.png' });
 
             await browser.close();
           })();
-          EOF
-
-      - name: Verify file
+          "
+      
+      - name: Check file
         run: ls -l
 
-      - name: Upload artifact
+      - name: Upload screenshot
         uses: actions/upload-artifact@v4
         with:
           name: terms-screenshot
