@@ -1,1 +1,43 @@
+name: "CV Terms Screenshot"
+description: "Capture paginated CV terms table (filtered + sorted)"
+author: "You"
 
+inputs:
+  url:
+    description: "Target URL"
+    required: false
+    default: "https://cv.hres.ca/en/terms/15"
+
+  days:
+    description: "Filter rows updated in last N days"
+    required: false
+    default: "4"
+
+  output:
+    description: "Output screenshot file"
+    required: false
+    default: "screenshot.png"
+
+runs:
+  using: "composite"
+
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+
+    - name: Install Playwright
+      shell: bash
+      run: |
+        npm init -y
+        npm install playwright
+        npx playwright install --with-deps
+
+    - name: Run script
+      shell: bash
+      run: node ${{ github.action_path }}/screenshot.js
+      env:
+        URL: ${{ inputs.url }}
+        DAYS: ${{ inputs.days }}
+        OUTPUT: ${{ inputs.output }}
