@@ -27,7 +27,7 @@ jobs:
           npm install playwright
           npx playwright install --with-deps
 
-      - name: Capture screenshot
+      - name: Capture screenshot (robust)
         run: |
           node << 'EOF'
           const { chromium } = require('playwright');
@@ -36,18 +36,32 @@ jobs:
             const browser = await chromium.launch({ headless: true });
             const page = await browser.newPage();
 
-            await page.goto('https://cv.hres.ca/en/terms/15', {
-              waitUntil: 'domcontentloaded',
-              timeout: 60000
-            });
+            // ✅ retry logic
+            for (let i = 0; i < 3; i++) {
+              try {
+                await page.goto('https://cv.hres.ca/en/terms/15', {
+                  waitUntil: 'domcontentloaded', // faster, avoids full load
+                  timeout: 120000
+                });
+                break;
+              } catch (e) {
+                console.log(`Retry ${i + 1}...`);
+                if (i === 2) throw e;
+              }
+            }
 
-            // ✅ Click "Last updated" column to sort descending
+            // ✅ wait for table to appear
+            await page.waitForSelector('table', { timeout: 60000 });
+
+            // ✅ click sort twice to force descending
+            await page.click('th:has-text("Last updated")');
+            await page.waitForTimeout(1000);
             await page.click('th:has-text("Last updated")');
 
-            // wait for table refresh
+            // ✅ wait for update
             await page.waitForTimeout(3000);
 
-            // Take screenshot of the table area
+            // ✅ screenshot only table
             const table = await page.locator('table');
             await table.screenshot({ path: 'terms_latest.png' });
 
@@ -60,5 +74,5 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add terms_latest.png
-          git commit -m "Update latest CV terms screenshot" || echo "No changes"
+          git commit -m "Update screenshot" || echo "No changes"
           git push
