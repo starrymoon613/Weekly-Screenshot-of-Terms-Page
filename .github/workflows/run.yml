@@ -1,24 +1,72 @@
-name: Run Screenshot
+name: Fetch CV Terms (Latest Updated)
 
 on:
+  schedule:
+    - cron: "0 * * * *"
   workflow_dispatch:
 
 jobs:
-  run:
+  scrape:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Run CV Terms Screenshot Action
-        uses: ./.github/actions/cv-terms-screenshot
-        with:
-          days: 4
-          output: screenshot.png
+      - name: Install Python deps
+        run: pip install requests beautifulsoup4 lxml pandas
 
-      - name: Upload screenshot artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cv-terms-screenshot
-          path: screenshot.png
+      - name: Scrape and process
+        run: |
+          python << 'EOF'
+          import requests
+          from bs4 import BeautifulSoup
+          import pandas as pd
+
+          BASE_URL = "https://cv.hres.ca/en/terms/15?page={}"
+
+          rows = []
+
+          for page in range(1, 430):
+              url = BASE_URL.format(page)
+              r = requests.get(url)
+              if r.status_code != 200:
+                  break
+
+              soup = BeautifulSoup(r.text, "lxml")
+              table = soup.find("table")
+              if not table:
+                  break
+
+              tbody = table.find("tbody")
+              for tr in tbody.find_all("tr"):
+                  tds = [td.get_text(strip=True) for td in tr.find_all("td")]
+                  if len(tds) < 6:
+                      continue
+
+                  rows.append({
+                      "code": tds[0],
+                      "english_display_name": tds[1],
+                      "french_display_name": tds[2],
+                      "source": tds[3],
+                      "last_updated": tds[5]
+                  })
+
+              print(f"Fetched page {page}")
+
+          df = pd.DataFrame(rows)
+
+          df["last_updated"] = pd.to_datetime(df["last_updated"], errors="coerce")
+          df = df.sort_values(by="last_updated", ascending=False)
+
+          df.to_csv("terms_latest.csv", index=False)
+          print("Saved terms_latest.csv")
+          EOF
+
+      - name: Commit results
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add terms_latest.csv
+          git commit -m "Update latest CV terms" || echo "No changes"
+          git push
