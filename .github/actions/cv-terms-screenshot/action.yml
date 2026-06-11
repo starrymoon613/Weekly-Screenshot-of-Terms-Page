@@ -22,7 +22,7 @@ runs:
   using: "composite"
 
   steps:
-    - name: Checkout repo
+    - name: Checkout repository
       uses: actions/checkout@v4
 
     - name: Setup Node
@@ -44,4 +44,3 @@ runs:
         URL: ${{ inputs.url }}
         DAYS: ${{ inputs.days }}
         OUTPUT: ${{ inputs.output }}
-``
