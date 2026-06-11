@@ -19,17 +19,34 @@ jobs:
       - name: Install Python deps
         run: pip install requests beautifulsoup4 lxml pandas
 
-      - name: Fetch latest (fast)
+      - name: Fetch latest (fast + reliable)
         run: |
           python << 'EOF'
           import requests
           from bs4 import BeautifulSoup
           import pandas as pd
+          import time
 
           url = "https://cv.hres.ca/en/terms/15?sort=lastUpdated,desc&page=1"
-          r = requests.get(url, timeout=30)
 
-          soup = BeautifulSoup(r.text, "lxml")
+          headers = {
+              "User-Agent": "Mozilla/5.0"
+          }
+
+          # retry logic
+          for attempt in range(5):
+              try:
+                  response = requests.get(url, headers=headers, timeout=60)
+                  response.raise_for_status()
+                  print("Page fetched successfully")
+                  break
+              except Exception as e:
+                  print(f"Attempt {attempt+1} failed: {e}")
+                  time.sleep(5)
+          else:
+              raise Exception("Failed to fetch page after retries")
+
+          soup = BeautifulSoup(response.text, "lxml")
           table = soup.find("table")
 
           rows = []
@@ -51,8 +68,9 @@ jobs:
 
           df = pd.DataFrame(rows)
 
-          df["last_updated"] = pd.to_datetime(df["last_updated"], errors="coerce")
-          df = df.sort_values(by="last_updated", ascending=False)
+          if not df.empty:
+              df["last_updated"] = pd.to_datetime(df["last_updated"], errors="coerce")
+              df = df.sort_values(by="last_updated", ascending=False)
 
           df.to_csv("terms_latest.csv", index=False)
           print("Saved terms_latest.csv")
