@@ -1,4 +1,4 @@
-name: Screenshot CV Terms (Latest Updated)
+name: Screenshot CV Terms (Last 5 Days)
 
 permissions:
   contents: write
@@ -27,7 +27,7 @@ jobs:
           npm install playwright
           npx playwright install --with-deps
 
-      - name: Capture screenshot (robust)
+      - name: Capture screenshot (last 5 days only)
         run: |
           node << 'EOF'
           const { chromium } = require('playwright');
@@ -36,30 +36,48 @@ jobs:
             const browser = await chromium.launch({ headless: true });
             const page = await browser.newPage();
 
-            // ✅ retry logic
+            // ✅ retry loading the page
             for (let i = 0; i < 3; i++) {
               try {
                 await page.goto('https://cv.hres.ca/en/terms/15', {
-                  waitUntil: 'domcontentloaded', // faster, avoids full load
+                  waitUntil: 'domcontentloaded',
                   timeout: 120000
                 });
                 break;
               } catch (e) {
-                console.log(`Retry ${i + 1}...`);
+                console.log(`Retry ${i + 1}`);
                 if (i === 2) throw e;
               }
             }
 
-            // ✅ wait for table to appear
+            // ✅ wait for table
             await page.waitForSelector('table', { timeout: 60000 });
 
-            // ✅ click sort twice to force descending
+            // ✅ sort by "Last updated" (newest first)
             await page.click('th:has-text("Last updated")');
             await page.waitForTimeout(1000);
             await page.click('th:has-text("Last updated")');
-
-            // ✅ wait for update
             await page.waitForTimeout(3000);
+
+            // ✅ filter to last 5 days ONLY
+            const cutoff = new Date();
+            cutoff.setDate(cutoff.getDate() - 5);
+
+            await page.evaluate((cutoffDate) => {
+              const rows = document.querySelectorAll('tbody tr');
+
+              rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length < 6) return;
+
+                const text = cells[5].innerText.trim();
+                const date = new Date(text);
+
+                if (date < new Date(cutoffDate)) {
+                  row.style.display = 'none';
+                }
+              });
+            }, cutoff.toISOString());
 
             // ✅ screenshot only table
             const table = await page.locator('table');
@@ -73,6 +91,9 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
+
           git add terms_latest.png
-          git commit -m "Update screenshot" || echo "No changes"
-          git push
+          git commit -m "Update last 5 days screenshot" || echo "No changes"
+
+          git pull --rebase || echo "Nothing to pull"
+          git push || echo "Nothing to push"
