@@ -1,4 +1,4 @@
-name: Fetch CV Terms (Latest Updated)
+name: Screenshot CV Terms (Latest Updated)
 
 permissions:
   contents: write
@@ -9,77 +9,56 @@ on:
   workflow_dispatch:
 
 jobs:
-  scrape:
+  screenshot:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Install Python deps
-        run: pip install requests beautifulsoup4 lxml pandas
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-      - name: Fetch latest (fast + reliable)
+      - name: Install Playwright
         run: |
-          python << 'EOF'
-          import requests
-          from bs4 import BeautifulSoup
-          import pandas as pd
-          import time
+          npm init -y
+          npm install playwright
+          npx playwright install --with-deps
 
-          url = "https://cv.hres.ca/en/terms/15?sort=lastUpdated,desc&page=1"
+      - name: Capture screenshot
+        run: |
+          node << 'EOF'
+          const { chromium } = require('playwright');
 
-          headers = {
-              "User-Agent": "Mozilla/5.0"
-          }
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage();
 
-          # retry logic
-          for attempt in range(5):
-              try:
-                  response = requests.get(url, headers=headers, timeout=60)
-                  response.raise_for_status()
-                  print("Page fetched successfully")
-                  break
-              except Exception as e:
-                  print(f"Attempt {attempt+1} failed: {e}")
-                  time.sleep(5)
-          else:
-              raise Exception("Failed to fetch page after retries")
+            await page.goto('https://cv.hres.ca/en/terms/15', {
+              waitUntil: 'domcontentloaded',
+              timeout: 60000
+            });
 
-          soup = BeautifulSoup(response.text, "lxml")
-          table = soup.find("table")
+            // ✅ Click "Last updated" column to sort descending
+            await page.click('th:has-text("Last updated")');
 
-          rows = []
+            // wait for table refresh
+            await page.waitForTimeout(3000);
 
-          if table:
-              tbody = table.find("tbody")
-              for tr in tbody.find_all("tr"):
-                  tds = [td.get_text(strip=True) for td in tr.find_all("td")]
-                  if len(tds) < 6:
-                      continue
+            // Take screenshot of the table area
+            const table = await page.locator('table');
+            await table.screenshot({ path: 'terms_latest.png' });
 
-                  rows.append({
-                      "code": tds[0],
-                      "english_display_name": tds[1],
-                      "french_display_name": tds[2],
-                      "source": tds[3],
-                      "last_updated": tds[5]
-                  })
-
-          df = pd.DataFrame(rows)
-
-          if not df.empty:
-              df["last_updated"] = pd.to_datetime(df["last_updated"], errors="coerce")
-              df = df.sort_values(by="last_updated", ascending=False)
-
-          df.to_csv("terms_latest.csv", index=False)
-          print("Saved terms_latest.csv")
+            await browser.close();
+          })();
           EOF
 
-      - name: Commit results
+      - name: Commit screenshot
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add terms_latest.csv
-          git commit -m "Update latest CV terms" || echo "No changes"
+          git add terms_latest.png
+          git commit -m "Update latest CV terms screenshot" || echo "No changes"
           git push
