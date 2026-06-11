@@ -1,22 +1,33 @@
+
 const { chromium } = require("playwright");
 
 (async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
 
-  try {
-    await page.goto("https://cv.hres.ca/en/terms/15", {
-      timeout: 60000
-    });
+  await page.goto("https://cv.hres.ca/en/terms/15", {
+    timeout: 60000
+  });
 
-    await page.waitForSelector("table");
+  await page.waitForSelector("table");
 
-    // ✅ FILTER + CLEAN TABLE
-    await page.evaluate(() => {
+  const allRows = [];
+
+  // ✅ date threshold
+  const threshold = new Date();
+  threshold.setDate(threshold.getDate() - 4);
+  threshold.setHours(0, 0, 0, 0);
+
+  while (true) {
+    await page.waitForTimeout(1500);
+
+    // ✅ extract rows from current page
+    const rows = await page.evaluate((thresholdISO) => {
       const table = document.querySelector("table");
-      if (!table) return;
+      if (!table) return [];
 
-      // ✅ CORRECT column names
+      const headers = Array.from(table.querySelectorAll("thead th"));
+
       const allowed = [
         "Code",
         "English Display Name",
@@ -26,88 +37,109 @@ const { chromium } = require("playwright");
         "Last updated"
       ];
 
-      const headers = Array.from(table.querySelectorAll("thead th"));
+      const keepIndexes = headers
+        .map((th, i) => ({
+          index: i,
+          text: th.innerText.trim()
+        }))
+        .filter(h => allowed.some(a => h.text.includes(a)))
+        .map(h => h.index);
 
-      // map indexes to keep
-      const keepIndexes = [];
+      const threshold = new Date(thresholdISO);
 
-      headers.forEach((th, i) => {
-        const text = th.innerText.trim();
+      const data = [];
 
-        if (allowed.some(a => text.includes(a))) {
-          keepIndexes.push(i);
-        }
-      });
-
-      // ✅ remove unwanted header columns
-      headers.forEach((th, i) => {
-        if (!keepIndexes.includes(i)) th.remove();
-      });
-
-      const rows = Array.from(table.querySelectorAll("tbody tr"));
-
-      // ✅ last 4 days threshold
-      const threshold = new Date();
-      threshold.setHours(0, 0, 0, 0);
-      threshold.setDate(threshold.getDate() - 4);
+      const rows = table.querySelectorAll("tbody tr");
 
       rows.forEach(row => {
         const cells = Array.from(row.querySelectorAll("td"));
 
-        // remove unwanted columns
-        cells.forEach((td, i) => {
-          if (!keepIndexes.includes(i)) td.remove();
-        });
+        const filtered = keepIndexes.map(i => cells[i]?.innerText.trim());
 
-        const lastCell = row.querySelector("td:last-child");
+        const last = filtered[filtered.length - 1];
+        if (!last) return;
 
-        if (!lastCell) {
-          row.remove();
-          return;
-        }
-
-        const match = lastCell.innerText.match(/\d{4}-\d{2}-\d{2}/);
-
-        if (!match) {
-          row.remove();
-          return;
-        }
+        const match = last.match(/\d{4}-\d{2}-\d{2}/);
+        if (!match) return;
 
         const rowDate = new Date(match[0]);
         rowDate.setHours(0, 0, 0, 0);
 
-        if (rowDate < threshold) {
-          row.remove();
+        if (rowDate >= threshold) {
+          data.push(filtered);
         }
       });
 
-      // ✅ Optional: enlarge table for clearer screenshot
-      table.style.fontSize = "16px";
-      table.style.width = "100%";
+      return data;
+    }, threshold.toISOString());
 
-      // ✅ Remove everything else on page
-      document.body.innerHTML = "";
-      document.body.appendChild(table);
-    });
+    allRows.push(...rows);
 
-    // Give layout time to settle
-    await page.waitForTimeout(1000);
+    console.log(`Collected rows so far: ${allRows.length}`);
 
-    // ✅ Screenshot ONLY table (clean output)
-    const table = page.locator("table");
+    // ✅ STOP EARLY if no recent rows found
+    if (rows.length === 0) {
+      console.log("No more recent rows — stopping early.");
+      break;
+    }
 
-    await table.screenshot({
-      path: "screenshot.png"
-    });
+    // ✅ try clicking "Next"
+    const nextButton = await page.locator('a:has-text("Next")');
 
-  } catch (err) {
-    console.log("Error:", err);
+    if (!(await nextButton.isVisible())) break;
 
-    await page.screenshot({
-      path: "screenshot.png",
-      fullPage: true
-    });
+    const isDisabled = await nextButton.getAttribute("class");
+
+    if (isDisabled && isDisabled.includes("disabled")) break;
+
+    await Promise.all([
+      page.waitForLoadState("networkidle"),
+      nextButton.click()
+    ]);
   }
+
+  // ✅ Build clean HTML table
+  const html = `
+    <html>
+      <head>
+        <style>
+          body { font-family: Arial; padding: 20px; }
+          table { border-collapse: collapse; width: 100%; }
+          th, td { border: 1px solid #ccc; padding: 8px; }
+          th { background: #f5f5f5; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>English Display Name</th>
+              <th>French Display Name</th>
+              <th>Source</th>
+              <th>Status</th>
+              <th>Last updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${allRows.map(row =>
+              `<tr>${row.map(cell => `<td>${cell}</td>`).join("")}</tr>`
+            ).join("")}
+          </tbody>
+        </table>
+      </body>
+    </html>
+  `;
+
+  // ✅ render clean table page
+  await page.setContent(html);
+
+  await page.waitForTimeout(1000);
+
+  await page.screenshot({
+    path: "screenshot.png",
+    fullPage: true
+  });
 
   await browser.close();
 })();
