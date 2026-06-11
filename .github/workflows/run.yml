@@ -1,4 +1,4 @@
-name: Screenshot CV Terms (Artifact Fix)
+name: Screenshot CV Terms
 
 permissions:
   contents: write
@@ -14,7 +14,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Install Node
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -31,7 +31,7 @@ jobs:
           const { chromium } = require('playwright');
 
           (async () => {
-            const browser = await chromium.launch({ headless: true });
+            const browser = await chromium.launch();
             const page = await browser.newPage();
 
             await page.goto('https://cv.hres.ca/en/terms/15', {
@@ -41,42 +41,26 @@ jobs:
 
             await page.waitForSelector('table');
 
-            // ✅ sort newest
+            // sort newest
             await page.click('th:has-text("Last updated")');
             await page.waitForTimeout(1000);
             await page.click('th:has-text("Last updated")');
 
             await page.waitForTimeout(3000);
 
-            // ✅ screenshot (FULL page first to guarantee file exists)
-            await page.screenshot({ path: 'terms_latest.png', fullPage: true });
+            // take screenshot
+            await page.screenshot({
+              path: 'terms_latest.png',
+              fullPage: true
+            });
 
             await browser.close();
           })();
           EOF
 
-      # ✅ DEBUG: confirm file exists
-      - name: Check file exists
-        run: |
-          echo "Files in workspace:"
-          ls -lah
-
-      # ✅ UPLOAD (will now work)
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: terms-screenshot
-          path: ./terms_latest.png
-
-      # ✅ optional commit (can remove if not needed)
-      - name: Commit screenshot
-        run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-
-          git add terms_latest.png
-          git commit -m "Update screenshot" || echo "No changes"
-
-          git pull --rebase || true
-          git push || true
+          path: terms_latest.png
 ``
