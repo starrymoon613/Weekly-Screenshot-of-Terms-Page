@@ -1,11 +1,9 @@
-name: Screenshot CV Terms (Clean Table Only)
+name: Screenshot CV Terms (Artifact Fix)
 
 permissions:
   contents: write
 
 on:
-  schedule:
-    - cron: "0 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -27,7 +25,7 @@ jobs:
           npm install playwright
           npx playwright install --with-deps
 
-      - name: Capture screenshot (FIXED FILTER)
+      - name: Capture screenshot
         run: |
           node << 'EOF'
           const { chromium } = require('playwright');
@@ -36,97 +34,41 @@ jobs:
             const browser = await chromium.launch({ headless: true });
             const page = await browser.newPage();
 
-            // ✅ block heavy resources (prevents timeout)
-            await page.route('**/*', (route) => {
-              const url = route.request().url();
-              if (
-                url.match(/\.(png|jpg|jpeg|gif|svg|css)$/) ||
-                url.includes('fonts') ||
-                url.includes('analytics')
-              ) {
-                return route.abort();
-              }
-              return route.continue();
-            });
-
-            // ✅ load page safely
             await page.goto('https://cv.hres.ca/en/terms/15', {
               waitUntil: 'domcontentloaded',
               timeout: 0
             });
 
-            await page.waitForSelector('table', { timeout: 60000 });
+            await page.waitForSelector('table');
 
             // ✅ sort newest
             await page.click('th:has-text("Last updated")');
             await page.waitForTimeout(1000);
             await page.click('th:has-text("Last updated")');
+
             await page.waitForTimeout(3000);
 
-            // ✅ FIXED: correct date parsing (YYYY-MM-DD HH:mm:ss)
-            const cutoff = new Date();
-            cutoff.setDate(cutoff.getDate() - 5);
-
-            await page.evaluate((cutoffIso) => {
-              const cutoffDate = new Date(cutoffIso);
-              const rows = document.querySelectorAll('tbody tr');
-
-              rows.forEach(row => {
-                const cells = row.querySelectorAll('td');
-                if (cells.length < 6) return;
-
-                const text = cells[5].innerText.trim();
-
-                const parts = text.split(' ');
-                if (parts.length < 2) return;
-
-                const [year, month, day] = parts[0].split('-').map(Number);
-                const [hour, minute, second] = parts[1].split(':').map(Number);
-
-                const parsedDate = new Date(year, month - 1, day, hour, minute, second);
-
-                if (isNaN(parsedDate.getTime())) return;
-
-                if (parsedDate < cutoffDate) {
-                  row.style.display = 'none';
-                }
-              });
-
-              // ✅ safety: if everything hidden, show rows again
-              const visible = document.querySelectorAll('tbody tr:not([style*="display: none"])');
-              if (visible.length === 0) {
-                document.querySelectorAll('tbody tr').forEach(r => r.style.display = '');
-              }
-            }, cutoff.toISOString());
-
-            // ✅ remove header/footer/banners
-            await page.evaluate(() => {
-              const elements = Array.from(document.body.children);
-
-              elements.forEach(el => {
-                if (!el.querySelector('table') && el.tagName !== 'TABLE') {
-                  el.style.display = 'none';
-                }
-              });
-
-              document.body.style.margin = '0';
-            });
-
-            // ✅ screenshot ONLY table
-            await page.locator('table').screenshot({
-              path: 'terms_latest.png'
-            });
+            // ✅ screenshot (FULL page first to guarantee file exists)
+            await page.screenshot({ path: 'terms_latest.png', fullPage: true });
 
             await browser.close();
           })();
           EOF
 
-      - name: Upload screenshot artifact
+      # ✅ DEBUG: confirm file exists
+      - name: Check file exists
+        run: |
+          echo "Files in workspace:"
+          ls -lah
+
+      # ✅ UPLOAD (will now work)
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: terms-screenshot
-          path: terms_latest.png
+          path: ./terms_latest.png
 
+      # ✅ optional commit (can remove if not needed)
       - name: Commit screenshot
         run: |
           git config user.name "github-actions"
@@ -135,5 +77,6 @@ jobs:
           git add terms_latest.png
           git commit -m "Update screenshot" || echo "No changes"
 
-          git pull --rebase || echo "Nothing to pull"
-          git push || echo "Nothing to push"
+          git pull --rebase || true
+          git push || true
+``
