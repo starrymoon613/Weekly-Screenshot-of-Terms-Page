@@ -8,11 +8,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
 
@@ -22,25 +20,15 @@ jobs:
           npm install playwright
           npx playwright install --with-deps
 
-      - name: Take screenshot (table only)
+      - name: Create screenshot script
         run: |
-          node -e "
+          cat << 'EOF' > screenshot.js
           const { chromium } = require('playwright');
 
           (async () => {
             const browser = await chromium.launch();
             const page = await browser.newPage();
 
-            // faster load (skip extra resources)
-            await page.route('**/*', (route) => {
-              const url = route.request().url();
-              if (url.match(/\.(png|jpg|jpeg|gif|svg|css)$/)) {
-                return route.abort();
-              }
-              route.continue();
-            });
-
-            // open page
             await page.goto('https://cv.hres.ca/en/terms/15', {
               waitUntil: 'domcontentloaded',
               timeout: 0
@@ -48,25 +36,26 @@ jobs:
 
             await page.waitForSelector('table');
 
-            // click "Last updated" twice → newest first
-            await page.click('th:has-text(\"Last updated\")');
+            await page.click('th:has-text("Last updated")');
             await page.waitForTimeout(1000);
-            await page.click('th:has-text(\"Last updated\")');
+            await page.click('th:has-text("Last updated")');
 
             await page.waitForTimeout(3000);
 
-            // screenshot ONLY the table (no header/footer)
             const table = page.locator('table');
             await table.screenshot({ path: 'terms_latest.png' });
 
             await browser.close();
           })();
-          "
+          EOF
 
-      - name: Verify file exists
+      - name: Run screenshot script
+        run: node screenshot.js
+
+      - name: Check file exists
         run: ls -l
 
-      - name: Upload screenshot artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: terms-screenshot
