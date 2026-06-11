@@ -11,114 +11,132 @@ const { chromium } = require("playwright");
   await page.goto("https://cv.hres.ca/en/terms/15", { timeout: 60000 });
   await page.waitForSelector("table");
 
-  const days = 4;
+  const allRows = [];
+  const days = 5;
 
-  // ✅ Extract + filter rows
-  const filteredRows = await page.evaluate((days) => {
-    const table = document.querySelector("table");
-    if (!table) return [];
+  const threshold = new Date();
+  threshold.setDate(threshold.getDate() - days);
+  threshold.setHours(0, 0, 0, 0);
 
-    const headers = Array.from(table.querySelectorAll("thead th"));
+  while (true) {
+    await page.waitForTimeout(1000);
 
-    const keep = [
-      "Code",
-      "English Display Name",
-      "French Display Name",
-      "Source",
-      "Status",
-      "Last updated"
-    ];
+    const rows = await page.evaluate((thresholdISO) => {
+      const table = document.querySelector("table");
+      if (!table) return [];
 
-    const keepIndexes = headers
-      .map((th, i) => ({ i, text: th.innerText.trim() }))
-      .filter(h => keep.some(k => h.text.includes(k)))
-      .map(h => h.i);
+      const headers = Array.from(table.querySelectorAll("thead th"));
 
-    const threshold = new Date();
-    threshold.setDate(threshold.getDate() - days);
-    threshold.setHours(0, 0, 0, 0);
+      const allowed = [
+        "Code",
+        "English Display Name",
+        "French Display Name",
+        "Source",
+        "Status",
+        "Last updated"
+      ];
 
-    const data = [];
+      const keepIndexes = headers
+        .map((th, i) => ({ i, t: th.innerText.trim() }))
+        .filter(h => allowed.some(a => h.t.includes(a)))
+        .map(h => h.i);
 
-    table.querySelectorAll("tbody tr").forEach(row => {
-      const cells = Array.from(row.querySelectorAll("td"));
+      const threshold = new Date(thresholdISO);
+      const data = [];
 
-      const filtered = keepIndexes.map(i => cells[i]?.innerText.trim());
+      table.querySelectorAll("tbody tr").forEach(row => {
+        const cells = Array.from(row.querySelectorAll("td"));
 
-      const last = filtered[filtered.length - 1];
-      if (!last) return;
+        const selected = keepIndexes.map(i => cells[i]?.innerText.trim());
 
-      const match =
-        last.match(/\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}/) ||
-        last.match(/\d{4}-\d{2}-\d{2}/);
+        const last = selected[selected.length - 1];
+        if (!last) return;
 
-      if (!match) return;
+        const match =
+          last.match(/\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}/) ||
+          last.match(/\d{4}-\d{2}-\d{2}/);
 
-      const rowDate = new Date(match[0]);
-      rowDate.setHours(0, 0, 0, 0);
+        if (!match) return;
 
-      if (rowDate >= threshold) {
-        data.push(filtered);
-      }
-    });
+        const rowDate = new Date(match[0]);
+        rowDate.setHours(0, 0, 0, 0);
 
-    return data;
+        if (rowDate >= threshold) {
+          data.push(selected);
+        }
+      });
 
-  }, days);
+      return data;
+    }, threshold.toISOString());
 
-  console.log("Rows found:", filteredRows.length);
+    console.log("Collected rows:", rows.length);
+    allRows.push(...rows);
+
+    // ✅ Stop if no more recent rows
+    if (rows.length === 0) break;
+
+    const next = page.locator('a:has-text("Next")').first();
+
+    if ((await next.count()) === 0) break;
+    if (!(await next.isVisible())) break;
+
+    const cls = await next.getAttribute("class");
+    if (cls && cls.includes("disabled")) break;
+
+    await Promise.all([
+      page.waitForLoadState("networkidle"),
+      next.click()
+    ]);
+  }
+
+  console.log("TOTAL:", allRows.length);
 
   // ✅ Sort newest first
-  filteredRows.sort((a, b) => {
-    const parse = (t) => {
+  allRows.sort((a, b) => {
+    const parse = (text) => {
       const m =
-        t?.match(/\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}/) ||
-        t?.match(/\d{4}-\d{2}-\d{2}/);
+        text?.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/) ||
+        text?.match(/\d{4}-\d{2}-\d{2}/);
       return m ? new Date(m[0]) : new Date(0);
     };
     return parse(b[5]) - parse(a[5]);
   });
 
-  // ✅ Build CLEAN TABLE (this is key)
-  const html = `
-  <html>
-    <head>
-      <style>
-        body { font-family: Arial; padding: 10px; }
-        table { border-collapse: collapse; width: 100%; }
-        th { text-align: left; padding: 8px; border-bottom: 2px solid black; }
-        td { padding: 8px; border-bottom: 1px solid #ccc; }
-      </style>
-    </head>
-    <body>
-      <table>
-        <thead>
-          <tr>
-            <th>Code</th>
-            <th>English Display Name</th>
-            <th>French Display Name</th>
-            <th>Source</th>
-            <th>Status</th>
-            <th>Last updated</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${filteredRows.map(r =>
-            `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`
-          ).join("")}
-        </tbody>
-      </table>
-    </body>
-  </html>
-  `;
+  // ✅ Replace table with clean content (same structure)
+  await page.evaluate((rows) => {
+    const table = document.querySelector("table");
+    if (!table) return;
 
-  await page.setContent(html);
+    const tbody = table.querySelector("tbody");
+    tbody.innerHTML = "";
 
-  // ✅ Screenshot ONLY the clean table
-  await page.screenshot({
-    path: "screenshot.png",
-    fullPage: true
+    rows.forEach(r => {
+      const tr = document.createElement("tr");
+
+      r.forEach(cell => {
+        const td = document.createElement("td");
+        td.innerText = cell;
+        tr.appendChild(td);
+      });
+
+      tbody.appendChild(tr);
+    });
+
+    // ✅ Hide everything except table
+    document.body.innerHTML = "";
+    document.body.appendChild(table);
+
+  }, allRows);
+
+  await page.waitForTimeout(500);
+
+  // ✅ Screenshot ONLY table
+  const table = page.locator("table");
+
+  await table.screenshot({
+    path: "screenshot.png"
   });
 
   await browser.close();
 })();
+``
