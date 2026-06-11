@@ -14,34 +14,55 @@ jobs:
         with:
           node-version: 20
 
-      - run: npm init -y
-      - run: npm install playwright
-      - run: npx playwright install --with-deps
+      - name: Install Playwright
+        run: |
+          npm init -y
+          npm install playwright
+          npx playwright install --with-deps
 
-      # ✅ Write JS file safely (NO YAML BREAKING)
-      - run: |
-          echo "const { chromium } = require('playwright');" > script.js
-          echo "(async () => {" >> script.js
-          echo "const browser = await chromium.launch();" >> script.js
-          echo "const page = await browser.newPage();" >> script.js
-          echo "await page.goto('https://cv.hres.ca/en/terms/15', { waitUntil: 'domcontentloaded', timeout: 0 });" >> script.js
-          echo "await page.waitForSelector('table');" >> script.js
-          echo "await page.click('th:has-text(\"Last updated\")');" >> script.js
-          echo "await page.waitForTimeout(1000);" >> script.js
-          echo "await page.click('th:has-text(\"Last updated\")');" >> script.js
-          echo "await page.waitForTimeout(3000);" >> script.js
-          echo "await page.locator('table').screenshot({ path: 'terms_latest.png' });" >> script.js
-          echo "await browser.close();" >> script.js
-          echo "})();" >> script.js
+      # ✅ Create script safely (no YAML errors)
+      - name: Create script
+        run: |
+          cat << 'EOF' > script.js
+          const { chromium } = require('playwright');
 
-      # ✅ Run it
-      - run: node script.js
+          (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage();
 
-      # ✅ Confirm file exists
-      - run: ls -l
+            await page.goto('https://cv.hres.ca/en/terms/15', {
+              waitUntil: 'networkidle',
+              timeout: 0
+            });
 
-      # ✅ Upload artifact (THIS is what you want)
-      - uses: actions/upload-artifact@v4
+            await page.waitForSelector('table');
+
+            // ✅ toggle "Last updated" to newest first
+            const header = page.locator('th:has-text("Last updated")');
+            await header.click();
+            await page.waitForTimeout(1500);
+            await header.click();
+
+            // ✅ wait for sort to apply
+            await page.waitForTimeout(4000);
+
+            // ✅ screenshot ONLY table
+            await page.locator('table').screenshot({
+              path: 'terms_latest.png'
+            });
+
+            await browser.close();
+          })();
+          EOF
+
+      - name: Run script
+        run: node script.js
+
+      - name: Verify file
+        run: ls -l
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
           name: terms-screenshot
           path: terms_latest.png
