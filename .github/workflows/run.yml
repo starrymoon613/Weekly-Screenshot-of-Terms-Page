@@ -8,14 +8,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run screenshot action
+      - name: Run CV Terms Screenshot Action
         uses: ./.github/actions/cv-terms-screenshot
+        with:
+          days: 4
+          output: screenshot.png
 
-      - name: Upload screenshot
+      - name: Upload screenshot artifact
         uses: actions/upload-artifact@v4
         with:
-          name: screenshot
+          name: cv-terms-screenshot
           path: screenshot.png
+``
