@@ -1,24 +1,46 @@
-name: Run Screenshot
+name: "CV Terms Screenshot"
+description: "Capture paginated CV terms table (filtered + sorted)"
+author: "You"
 
-on:
-  workflow_dispatch:
+inputs:
+  url:
+    description: "Target URL"
+    required: false
+    default: "https://cv.hres.ca/en/terms/15"
 
-jobs:
-  run:
-    runs-on: ubuntu-latest
+  days:
+    description: "Filter rows updated in last N days"
+    required: false
+    default: "4"
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+  output:
+    description: "Output screenshot file"
+    required: false
+    default: "screenshot.png"
 
-      - name: Run CV Terms Screenshot Action
-        uses: ./.github/actions/cv-terms-screenshot
-        with:
-          days: 4
-          output: screenshot.png
+runs:
+  using: "composite"
 
-      - name: Upload screenshot artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cv-terms-screenshot
-          path: screenshot.png
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+
+    - name: Install Playwright
+      shell: bash
+      run: |
+        npm init -y
+        npm install playwright
+        npx playwright install chromium --with-deps
+
+    - name: Run screenshot script
+      shell: bash
+      run: node ${{ github.action_path }}/screenshot.js
+      env:
+        URL: ${{ inputs.url }}
+        DAYS: ${{ inputs.days }}
+        OUTPUT: ${{ inputs.output }}
