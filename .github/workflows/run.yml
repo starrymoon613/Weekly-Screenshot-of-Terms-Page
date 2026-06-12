@@ -1,29 +1,83 @@
-const { chromium } = require('playwright');
+name: Screenshot CV Terms
 
-(async () => {
-  const browser = await chromium.launch({
-    args: ['--no-sandbox']
-  });
+on:
+  workflow_dispatch:
 
-  const page = await browser.newPage();
+jobs:
+  screenshot:
+    runs-on: ubuntu-latest
 
-  await page.goto('https://cv.hres.ca/en/terms/15', {
-    waitUntil: 'domcontentloaded',
-    timeout: 60000
-  });
+    steps:
+      - uses: actions/checkout@v4
 
-  await page.waitForSelector('table', { timeout: 60000 });
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-  // ✅ Calculate cutoff date (last 5 days)
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 5);
+      - name: Install Playwright
+        run: |
+          npm init -y
+          npm install playwright
+          npx playwright install --with-deps
 
-  console.log('Cutoff date:', cutoff.toISOString());
+      - name: Run script
+        run: |
+          cat << 'EOF' > script.js
+          const { chromium } = require('playwright');
 
-  // ✅ Filter rows directly in browser
-  await page.evaluate((cutoffISO) => {
-    const cutoffDate = new Date(cutoffISO);
+          (async () => {
+            const browser = await chromium.launch({
+              args: ['--no-sandbox']
+            });
 
-    const rows = document.querySelectorAll('table tbody tr');
+            const page = await browser.newPage();
 
-    rows.forEach(row => {
+            await page.goto('https://cv.hres.ca/en/terms/15', {
+              waitUntil: 'domcontentloaded',
+              timeout: 60000
+            });
+
+            await page.waitForSelector('table', { timeout: 60000 });
+
+            const cutoff = new Date();
+            cutoff.setDate(cutoff.getDate() - 5);
+
+            await page.evaluate((cutoffISO) => {
+              const cutoffDate = new Date(cutoffISO);
+              const rows = document.querySelectorAll('table tbody tr');
+
+              rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                const text = cells[cells.length - 1]?.innerText.trim();
+
+                if (!text) {
+                  row.remove();
+                  return;
+                }
+
+                const parsed = new Date(text);
+
+                if (isNaN(parsed) || parsed < cutoffDate) {
+                  row.remove();
+                }
+              });
+            }, cutoff.toISOString());
+
+            await page.waitForTimeout(2000);
+
+            await page.locator('table').screenshot({
+              path: 'screenshot.png'
+            });
+
+            await browser.close();
+          })();
+          EOF
+
+          node script.js
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot
+          path: screenshot.png
+``
