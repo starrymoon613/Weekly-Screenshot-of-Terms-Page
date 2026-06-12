@@ -1,94 +1,29 @@
-name: Screenshot CV Terms
+const { chromium } = require('playwright');
 
-on:
-  workflow_dispatch:
+(async () => {
+  const browser = await chromium.launch({
+    args: ['--no-sandbox']
+  });
 
-jobs:
-  screenshot:
-    runs-on: ubuntu-latest
+  const page = await browser.newPage();
 
-    steps:
-      - uses: actions/checkout@v4
+  await page.goto('https://cv.hres.ca/en/terms/15', {
+    waitUntil: 'domcontentloaded',
+    timeout: 60000
+  });
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
+  await page.waitForSelector('table', { timeout: 60000 });
 
-      - name: Install Playwright
-        run: |
-          npm init -y
-          npm install playwright
-          npx playwright install --with-deps
+  // ✅ Calculate cutoff date (last 5 days)
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 5);
 
-      - name: Create script
-        run: |
-          cat << 'EOF' > script.js
-          const { chromium } = require('playwright');
+  console.log('Cutoff date:', cutoff.toISOString());
 
-          (async () => {
-            const browser = await chromium.launch({
-              args: ['--no-sandbox']
-            });
+  // ✅ Filter rows directly in browser
+  await page.evaluate((cutoffISO) => {
+    const cutoffDate = new Date(cutoffISO);
 
-            const page = await browser.newPage();
+    const rows = document.querySelectorAll('table tbody tr');
 
-            // Go to page
-            await page.goto('https://cv.hres.ca/en/terms/15', {
-              waitUntil: 'domcontentloaded',
-              timeout: 60000
-            });
-
-            await page.waitForSelector('table', { timeout: 60000 });
-
-            // ✅ Calculate last 5 days range
-            const today = new Date();
-            const past = new Date();
-            past.setDate(today.getDate() - 5);
-
-            const format = (d) => d.toISOString().split('T')[0];
-            const startDate = format(past);
-            const endDate = format(today);
-
-            console.log(`Filtering from ${startDate} to ${endDate}`);
-
-            // ✅ Try to fill date filters (common patterns)
-            try {
-              await page.fill('input[type="date"]:nth-of-type(1)', startDate);
-              await page.fill('input[type="date"]:nth-of-type(2)', endDate);
-
-              // Try clicking Apply/Search if it exists
-              const applyBtn = page.locator('button:has-text("Apply"), button:has-text("Search")');
-              if (await applyBtn.count() > 0) {
-                await applyBtn.first().click();
-              }
-
-              await page.waitForTimeout(3000);
-            } catch (e) {
-              console.log('No date filter UI found, continuing without filter');
-            }
-
-            // ✅ Sort by newest
-            const header = page.locator('th:has-text("Last updated")');
-            await header.click();
-            await page.waitForTimeout(1000);
-            await header.click();
-
-            await page.waitForTimeout(3000);
-
-            // ✅ Screenshot table
-            await page.locator('table').screenshot({
-              path: 'screenshot.png'
-            });
-
-            await browser.close();
-          })();
-          EOF
-
-          node script.js
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: screenshot
-          path: screenshot.png
-``
+    rows.forEach(row => {
