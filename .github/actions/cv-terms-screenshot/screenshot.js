@@ -7,7 +7,7 @@ const { chromium } = require('playwright');
 
   const page = await browser.newPage();
 
-  // ✅ Load page with retry (prevents random failures)
+  // ✅ Load page with retry
   for (let i = 0; i < 3; i++) {
     try {
       await page.goto('https://cv.hres.ca/en/terms/15', {
@@ -22,17 +22,18 @@ const { chromium } = require('playwright');
 
   await page.waitForSelector('table', { timeout: 60000 });
 
-  // ✅ Sort by "Last updated" (newest first)
+  // ✅ Click "Last updated" twice to sort newest first
   try {
     const header = page.locator('th:has-text("Last updated")');
     await header.click();
     await page.waitForTimeout(1000);
     await header.click();
+    await page.waitForTimeout(2000);
   } catch (e) {
-    console.log('Could not sort column');
+    console.log('Sorting not applied');
   }
 
-  // ✅ Filter rows to last 5 days
+  // ✅ Filter rows from last 5 days
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 5);
 
@@ -43,39 +44,47 @@ const { chromium } = require('playwright');
     rows.forEach(row => {
       const cells = row.querySelectorAll('td');
 
-      // ⚠️ Adjust column index if needed
-      const lastUpdatedText = cells[cells.length - 1]?.innerText.trim();
+      // ✅ Column index FIXED (based on your screenshot)
+      // Code(0), English(1), French(2), Source(3), Status(4), Last updated(5)
+      const rawText = cells[5]?.innerText;
 
-      if (!lastUpdatedText) {
+      if (!rawText) {
         row.remove();
         return;
       }
 
-      // Try multiple parsing strategies
-      let parsedDate = new Date(lastUpdatedText);
+      // ✅ Extract ONLY the date part (ignore time)
+      const datePart = rawText.split(/\s+/)[0].trim();
 
-      // Fallback for non-standard formats
-      if (isNaN(parsedDate)) {
-        const cleaned = lastUpdatedText.replace(/[^0-9\-/: ]/g, '');
-        parsedDate = new Date(cleaned);
-      }
+      const parsedDate = new Date(datePart);
 
+      // ✅ Remove anything older than 5 days
       if (isNaN(parsedDate) || parsedDate < cutoffDate) {
         row.remove();
       }
     });
+
+    // ✅ If nothing remains, show a message instead of blank table
+    const tbody = document.querySelector('table tbody');
+    if (tbody && tbody.children.length === 0) {
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 6;
+      cell.innerText = 'No records updated in the last 5 days';
+      row.appendChild(cell);
+      tbody.appendChild(row);
+    }
+
   }, cutoff.toISOString());
 
-  // ✅ Wait for DOM update
   await page.waitForTimeout(2000);
 
-  // ✅ Take screenshot (this is critical for artifact)
+  // ✅ Take screenshot
   await page.locator('table').screenshot({
     path: 'screenshot.png'
   });
 
-  console.log('Screenshot saved');
+  console.log('✅ Screenshot saved');
 
   await browser.close();
 })();
-``
