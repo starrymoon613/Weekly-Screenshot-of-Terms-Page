@@ -14,57 +14,14 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Playwright
+      - name: Install dependencies
         run: |
           npm init -y
           npm install playwright
           npx playwright install --with-deps
 
-      - name: Create script file
-        run: |
-          echo "const { chromium } = require('playwright');
-
-          (async () => {
-            const browser = await chromium.launch({ args: ['--no-sandbox'] });
-            const page = await browser.newPage();
-
-            await page.goto('https://cv.hres.ca/en/terms/15', {
-              waitUntil: 'domcontentloaded'
-            });
-
-            await page.waitForSelector('table');
-
-            const cutoff = new Date();
-            cutoff.setDate(cutoff.getDate() - 5);
-
-            await page.evaluate((cutoffISO) => {
-              const cutoffDate = new Date(cutoffISO);
-              const rows = document.querySelectorAll('table tbody tr');
-
-              rows.forEach(row => {
-                const cells = row.querySelectorAll('td');
-                const text = cells[cells.length - 1]?.innerText.trim();
-
-                if (!text) {
-                  row.remove();
-                  return;
-                }
-
-                const parsed = new Date(text);
-
-                if (isNaN(parsed) || parsed < cutoffDate) {
-                  row.remove();
-                }
-              });
-            }, cutoff.toISOString());
-
-            await page.locator('table').screenshot({ path: 'screenshot.png' });
-
-            await browser.close();
-          })();" > script.js
-
-      - name: Run script
-        run: node script.js
+      - name: Run screenshot script
+        run: node .github/actions/cv-terms-screenshot/screenshot.js
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
