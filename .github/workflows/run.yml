@@ -8,19 +8,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install dependencies
-        run: |
-          npm init -y
-          npm install playwright
-          npx playwright install --with-deps
+      - name: Install Playwright
+        run: npm install playwright && npx playwright install --with-deps
 
-      - name: Run screenshot script
+      - name: Run script
         run: node .github/actions/cv-terms-screenshot/screenshot.js
 
       - name: Upload artifact
@@ -28,4 +27,3 @@ jobs:
         with:
           name: screenshot
           path: screenshot.png
-``
