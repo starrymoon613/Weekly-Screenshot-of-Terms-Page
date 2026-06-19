@@ -6,52 +6,22 @@ const { chromium } = require('playwright');
     headless: true
   });
 
-  const context = await browser.newContext({
-    userAgent:
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36'
+  const page = await browser.newPage();
+
+  // ✅ Load page
+  await page.goto('https://cv.hres.ca/en/terms/15', {
+    waitUntil: 'networkidle',
+    timeout: 60000
   });
 
-  const page = await context.newPage();
-
-  // ✅ Load page with retry
-  for (let i = 0; i < 3; i++) {
-    try {
-      await page.goto('https://cv.hres.ca/en/terms/15', {
-        waitUntil: 'networkidle',
-        timeout: 60000
-      });
-      break;
-    } catch (e) {
-      console.log('Retrying page load...');
-    }
-  }
-
-  // ✅ Allow JS rendering (important for CI)
-  await page.waitForTimeout(5000);
-
-  // ✅ Debug screenshot (optional but useful)
-  await page.screenshot({ path: 'debug-before-data.png' });
-
-  // ✅ Wait for data rows (NOT just table)
+  // ✅ Wait for data (THIS replaces waitForSelector)
   await page.waitForFunction(() => {
-    const rows = document.querySelectorAll('table tbody tr');
-    return rows.length > 0;
+    return document.querySelectorAll('table tbody tr').length > 0;
   }, { timeout: 120000 });
 
-  await page.screenshot({ path: 'debug-after-data.png' });
+  console.log('✅ Table data loaded');
 
-  // ✅ Click "Last updated" twice (sorting)
-  try {
-    const header = page.locator('th:has-text("Last updated")');
-    await header.click();
-    await page.waitForTimeout(1000);
-    await header.click();
-    await page.waitForTimeout(2000);
-  } catch (e) {
-    console.log('Sorting not applied');
-  }
-
-  // ✅ Filter rows from last 5 days
+  // ✅ Filter last 5 days
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 5);
 
@@ -81,15 +51,13 @@ const { chromium } = require('playwright');
       const row = document.createElement('tr');
       const cell = document.createElement('td');
       cell.colSpan = 6;
-      cell.innerText = 'No records updated in the last 5 days';
+      cell.innerText = 'No records updated in last 5 days';
       row.appendChild(cell);
       tbody.appendChild(row);
     }
   }, cutoff.toISOString());
 
-  await page.waitForTimeout(2000);
-
-  // ✅ ✅ SAFE SCREENSHOT (fixes your error)
+  // ✅ Safe screenshot (never fails)
   const table = await page.$('table');
 
   if (table) {
@@ -101,14 +69,12 @@ const { chromium } = require('playwright');
         clip: box
       });
     } else {
-      console.log('Table not visible, taking full page screenshot');
       await page.screenshot({
         path: 'screenshot.png',
         fullPage: true
       });
     }
   } else {
-    console.log('No table found, taking full page screenshot');
     await page.screenshot({
       path: 'screenshot.png',
       fullPage: true
