@@ -26,22 +26,21 @@ const { chromium } = require('playwright');
     }
   }
 
-  // ✅ Give extra time for JS rendering (important for CI)
+  // ✅ Allow JS rendering (important for CI)
   await page.waitForTimeout(5000);
 
-  // ✅ Debug screenshot (helps if CI fails)
+  // ✅ Debug screenshot (optional but useful)
   await page.screenshot({ path: 'debug-before-data.png' });
 
-  // ✅ Wait for ACTUAL data rows (not just table shell)
+  // ✅ Wait for data rows (NOT just table)
   await page.waitForFunction(() => {
     const rows = document.querySelectorAll('table tbody tr');
     return rows.length > 0;
   }, { timeout: 120000 });
 
-  // ✅ Debug after data loads
   await page.screenshot({ path: 'debug-after-data.png' });
 
-  // ✅ Click "Last updated" twice to sort newest first
+  // ✅ Click "Last updated" twice (sorting)
   try {
     const header = page.locator('th:has-text("Last updated")');
     await header.click();
@@ -62,9 +61,6 @@ const { chromium } = require('playwright');
 
     rows.forEach(row => {
       const cells = row.querySelectorAll('td');
-
-      // Column index:
-      // Code(0), English(1), French(2), Source(3), Status(4), Last updated(5)
       const rawText = cells[5]?.innerText;
 
       if (!rawText) {
@@ -93,10 +89,31 @@ const { chromium } = require('playwright');
 
   await page.waitForTimeout(2000);
 
-  // ✅ Final screenshot
-  await page.locator('table').screenshot({
-    path: 'screenshot.png'
-  });
+  // ✅ ✅ SAFE SCREENSHOT (fixes your error)
+  const table = await page.$('table');
+
+  if (table) {
+    const box = await table.boundingBox();
+
+    if (box) {
+      await page.screenshot({
+        path: 'screenshot.png',
+        clip: box
+      });
+    } else {
+      console.log('Table not visible, taking full page screenshot');
+      await page.screenshot({
+        path: 'screenshot.png',
+        fullPage: true
+      });
+    }
+  } else {
+    console.log('No table found, taking full page screenshot');
+    await page.screenshot({
+      path: 'screenshot.png',
+      fullPage: true
+    });
+  }
 
   console.log('✅ Screenshot saved');
 
