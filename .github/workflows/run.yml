@@ -1,7 +1,7 @@
-name: Screenshot CV Terms
-
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 12 * * 5'  # 8:00 AM Ottawa (UTC-4). Adjust to 13 for winter (UTC-5)
 
 jobs:
   screenshot:
