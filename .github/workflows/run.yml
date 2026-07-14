@@ -1,4 +1,4 @@
-name: Weekly Screenshot
+name: Screenshot CV Terms
 
 on:
   workflow_dispatch:
@@ -26,8 +26,12 @@ jobs:
       - name: Run script
         run: node .github/actions/cv-terms-screenshot/screenshot.js
 
+      - name: Verify file exists
+        run: ls -lah
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: screenshot
           path: screenshot.png
+          if-no-files-found: error
