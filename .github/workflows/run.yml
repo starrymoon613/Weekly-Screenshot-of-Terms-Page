@@ -1,7 +1,9 @@
+name: Weekly Screenshot
+
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 12 * * 5'  # 8:00 AM Ottawa (UTC-4). Adjust to 13 for winter (UTC-5)
+    - cron: '0 12 * * 5'
 
 jobs:
   screenshot:
@@ -17,7 +19,9 @@ jobs:
           node-version: 20
 
       - name: Install Playwright
-        run: npm install playwright && npx playwright install --with-deps
+        run: |
+          npm install playwright
+          npx playwright install --with-deps
 
       - name: Run script
         run: node .github/actions/cv-terms-screenshot/screenshot.js
