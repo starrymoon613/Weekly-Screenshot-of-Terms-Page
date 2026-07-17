@@ -1,10 +1,6 @@
 const { chromium } = require('playwright');
 
 (async () => {
-  const outputFile = process.env.OUTPUT || 'screenshot.png';
-  const targetUrl =
-    process.env.URL || 'https://cv.hres.ca/en/terms/15';
-
   const browser = await chromium.launch({
     headless: true,
     args: ['--no-sandbox']
@@ -18,24 +14,31 @@ const { chromium } = require('playwright');
   });
 
   try {
-    console.log(`Opening ${targetUrl}`);
-
-    await page.goto(targetUrl, {
+    await page.goto('https://cv.hres.ca/en/terms/15', {
       waitUntil: 'networkidle',
       timeout: 120000
     });
 
-    await page.waitForTimeout(5000);
+    await page.waitForSelector('table');
 
-    console.log('Final URL:', page.url());
-    console.log('Title:', await page.title());
-
-    await page.screenshot({
-      path: outputFile,
-      fullPage: true
+    const rows = await page.evaluate(() => {
+      return Array.from(
+        document.querySelectorAll('table tbody tr')
+      )
+      .slice(0, 10)
+      .map(row =>
+        Array.from(row.querySelectorAll('td')).map(td =>
+          td.innerText.trim()
+        )
+      );
     });
 
-    console.log(`✅ Screenshot saved: ${outputFile}`);
+    console.log(JSON.stringify(rows, null, 2));
+
+    await page.screenshot({
+      path: 'screenshot.png',
+      fullPage: true
+    });
   } finally {
     await browser.close();
   }
