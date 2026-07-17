@@ -19,26 +19,29 @@ const { chromium } = require('playwright');
       timeout: 120000
     });
 
-    await page.waitForSelector('table');
-
-    const rows = await page.evaluate(() => {
-      return Array.from(
-        document.querySelectorAll('table tbody tr')
-      )
-      .slice(0, 10)
-      .map(row =>
-        Array.from(row.querySelectorAll('td')).map(td =>
-          td.innerText.trim()
-        )
-      );
+    await page.waitForSelector('table', {
+      timeout: 120000
     });
 
-    console.log(JSON.stringify(rows, null, 2));
+    console.log('Title:', await page.title());
+    console.log('URL:', page.url());
+
+    const rowCount = await page.locator('table tbody tr').count();
+    console.log(`Rows found: ${rowCount}`);
 
     await page.screenshot({
-      path: 'screenshot.png',
-      fullPage: true
+      path: 'screenshot.png'
     });
+
+    console.log('Screenshot saved');
+  } catch (error) {
+    console.error(error);
+
+    await page.screenshot({
+      path: 'error.png'
+    });
+
+    throw error;
   } finally {
     await browser.close();
   }
