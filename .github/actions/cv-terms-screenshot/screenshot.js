@@ -1,9 +1,6 @@
 const { chromium } = require('playwright');
 
 (async () => {
-  const outputFile = 'screenshot.png';
-  const days = 5;
-
   const browser = await chromium.launch({
     headless: true,
     args: ['--no-sandbox']
@@ -24,120 +21,26 @@ const { chromium } = require('playwright');
 
     await page.waitForSelector('table');
 
-    const rows = await page.evaluate(() => {
-      return Array.from(
-        document.querySelectorAll('table tbody tr')
-      ).map(row =>
-        Array.from(row.querySelectorAll('td')).map(td =>
-          td.innerText.trim()
-        )
-      );
-    });
+    // Sort by Last Updated
+    await page.click('text=Last updated');
+    await page.waitForTimeout(2000);
 
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
-    cutoff.setHours(0, 0, 0, 0);
+    // Search for 2026 records
+    const searchBox = page.locator('input[type="search"]').first();
+    await searchBox.fill('2026');
 
-    const filtered = rows.filter(row => {
-      const rawDate = row[5];
+    await page.waitForTimeout(3000);
 
-      if (!rawDate) return false;
+    const rowCount = await page.locator('table tbody tr').count();
 
-      const updated = new Date(rawDate);
-
-      return (
-        !isNaN(updated.getTime()) &&
-        updated >= cutoff
-      );
-    });
-
-    console.log(`Found ${filtered.length} records`);
-
-    const tableRows =
-      filtered.length > 0
-        ? filtered.map(row => `
-            <tr>
-              <td>${row[0]}</td>
-              <td>${row[1]}</td>
-              <td>${row[2]}</td>
-              <td>${row[3]}</td>
-              <td>${row[4]}</td>
-              <td>${row[5]}</td>
-            </tr>
-          `).join('')
-        : `
-          <tr>
-            <td colspan="6">
-              No records updated in the last 5 days (including today)
-            </td>
-          </tr>
-        `;
-
-    await page.setContent(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-          }
-
-          h2 {
-            margin-bottom: 20px;
-          }
-
-          table {
-            border-collapse: collapse;
-            width: 100%;
-          }
-
-          th {
-            background: #f3f3f3;
-            border: 1px solid #ccc;
-            padding: 8px;
-            text-align: left;
-          }
-
-          td {
-            border: 1px solid #ccc;
-            padding: 8px;
-          }
-        </style>
-      </head>
-      <body>
-
-      <h2>
-        Records updated in the last 5 days
-      </h2>
-
-      <table>
-        <thead>
-          <tr>
-            <th>Code</th>
-            <th>English Display Name</th>
-            <th>French Display Name</th>
-            <th>Source</th>
-            <th>Status</th>
-            <th>Last updated</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          ${tableRows}
-        </tbody>
-      </table>
-
-      </body>
-      </html>
-    `);
+    console.log(`Rows found after filtering: ${rowCount}`);
 
     await page.screenshot({
-      path: outputFile,
+      path: 'screenshot.png',
       fullPage: true
     });
 
-    console.log(`Screenshot saved: ${outputFile}`);
+    console.log('Screenshot saved');
   } finally {
     await browser.close();
   }
