@@ -21,11 +21,16 @@ const { chromium } = require('playwright');
 
     await page.waitForSelector('table');
 
-    // Sort by Last Updated
+    console.log('*** NEW FILTER TEST ***');
+
+    // Click Last Updated twice to sort newest first
     await page.click('text=Last updated');
     await page.waitForTimeout(2000);
 
-    // Search for 2026 records
+    await page.click('text=Last updated');
+    await page.waitForTimeout(2000);
+
+    // Search for current year
     const searchBox = page.locator('input[type="search"]').first();
     await searchBox.fill('2026');
 
