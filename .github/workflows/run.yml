@@ -1,37 +1,46 @@
-name: Screenshot CV Terms
+name: Weekly CV Terms Screenshot
 
 on:
   workflow_dispatch:
+
   schedule:
-    - cron: '0 12 * * 5'
+    # Friday 09:00 AM Ottawa (EDT = UTC-4)
+    - cron: '0 13 * * 5'
 
 jobs:
   screenshot:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20'
 
       - name: Install Playwright
         run: |
           npm install playwright
-          npx playwright install --with-deps
+          npx playwright install chromium --with-deps
 
-      - name: Run script
-        run: node .github/actions/cv-terms-screenshot/screenshot.js
+      - name: Generate screenshot
+        env:
+          URL: https://cv.hres.ca/en/terms/15
+          DAYS: 5
+          OUTPUT: screenshot.png
+        run: |
+          node .github/actions/cv-terms-screenshot/screenshot.js
 
-      - name: Verify file exists
-        run: ls -lah
+      - name: Verify screenshot created
+        run: |
+          ls -lah
+          test -f screenshot.png
 
-      - name: Upload artifact
+      - name: Upload screenshot artifact
         uses: actions/upload-artifact@v4
         with:
-          name: screenshot
+          name: cv-terms-screenshot
           path: screenshot.png
           if-no-files-found: error
