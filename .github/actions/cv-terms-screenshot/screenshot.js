@@ -1,42 +1,35 @@
-const records = [];
+const { chromium } = require('playwright');
 
-let hasNextPage = true;
+(async () => {
+  const outputFile = process.env.OUTPUT || 'screenshot.png';
+  const targetUrl =
+    process.env.URL || 'https://cv.hres.ca/en/terms/15';
 
-while (hasNextPage) {
-  await page.waitForSelector('table tbody tr');
-
-  const pageRows = await page.evaluate(() => {
-    return Array.from(
-      document.querySelectorAll('table tbody tr')
-    ).map(row => {
-      const cells = Array.from(row.querySelectorAll('td'));
-
-      return cells.map(cell => cell.innerText.trim());
-    });
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--no-sandbox']
   });
 
-  records.push(...pageRows);
+  const page = await browser.newPage();
 
-  const nextButton = await page.$(
-    'a[aria-label="Next"], .pager-next a, .pagination .next a'
-  );
+  try {
+    console.log(`Opening ${targetUrl}`);
 
-  if (nextButton) {
-    const disabled = await nextButton.evaluate(el =>
-      el.classList.contains('disabled')
-    );
+    await page.goto(targetUrl, {
+      waitUntil: 'networkidle',
+      timeout: 120000
+    });
 
-    if (!disabled) {
-      await Promise.all([
-        page.waitForLoadState('networkidle'),
-        nextButton.click()
-      ]);
-    } else {
-      hasNextPage = false;
-    }
-  } else {
-    hasNextPage = false;
+    await page.screenshot({
+      path: outputFile,
+      fullPage: true
+    });
+
+    console.log(`Screenshot saved: ${outputFile}`);
+  } catch (error) {
+    console.error(error);
+    throw error;
+  } finally {
+    await browser.close();
   }
-}
-
-console.log(`Collected ${records.length} total rows`);
+})();
