@@ -1,6 +1,6 @@
 name: "CV Terms Screenshot"
-description: "Capture paginated CV terms table (filtered + sorted)"
-author: "You"
+description: "Capture paginated CV terms table (filtered and sorted)"
+author: "Connie Leung"
 
 inputs:
   url:
@@ -9,9 +9,9 @@ inputs:
     default: "https://cv.hres.ca/en/terms/15"
 
   days:
-    description: "Filter rows updated in last N days"
+    description: "Filter rows updated in the last N days"
     required: false
-    default: "4"
+    default: "5"
 
   output:
     description: "Output screenshot file"
@@ -25,10 +25,10 @@ runs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Setup Node
+    - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: 20
+        node-version: "20"
 
     - name: Install Playwright
       shell: bash
@@ -39,7 +39,7 @@ runs:
 
     - name: Run screenshot script
       shell: bash
-      run: node ${{ github.action_path }}/screenshot.js
+      run: node "${{ github.action_path }}/screenshot.js"
       env:
         URL: ${{ inputs.url }}
         DAYS: ${{ inputs.days }}
