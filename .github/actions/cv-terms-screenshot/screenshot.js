@@ -12,8 +12,8 @@ const { chromium } = require('playwright');
 
   const page = await browser.newPage({
     viewport: {
-      width: 1920,
-      height: 1080
+      width: 1600,
+      height: 1200
     }
   });
 
@@ -35,16 +35,7 @@ const { chromium } = require('playwright');
       fullPage: true
     });
 
-    console.log(`Screenshot saved: ${outputFile}`);
-  } catch (error) {
-    console.error(error);
-
-    await page.screenshot({
-      path: 'error.png',
-      fullPage: true
-    });
-
-    throw error;
+    console.log(`✅ Screenshot saved: ${outputFile}`);
   } finally {
     await browser.close();
   }
