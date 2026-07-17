@@ -1,6 +1,12 @@
 const { chromium } = require('playwright');
 
 (async () => {
+  const outputFile = process.env.OUTPUT || 'screenshot.png';
+  const targetUrl =
+    process.env.URL || 'https://cv.hres.ca/en/terms/15';
+
+  const days = parseInt(process.env.DAYS || '5', 10);
+
   const browser = await chromium.launch({
     headless: true,
     args: [
@@ -15,9 +21,9 @@ const { chromium } = require('playwright');
   });
 
   try {
-    console.log('Loading page...');
+    console.log(`Loading page: ${targetUrl}`);
 
-    await page.goto('https://cv.hres.ca/en/terms/15', {
+    await page.goto(targetUrl, {
       waitUntil: 'networkidle',
       timeout: 120000
     });
@@ -25,13 +31,6 @@ const { chromium } = require('playwright');
     console.log('URL:', page.url());
     console.log('Title:', await page.title());
 
-    // Save a debug screenshot in case page structure changes
-    await page.screenshot({
-      path: 'debug.png',
-      fullPage: true
-    });
-
-    // Wait for the table itself
     await page.waitForSelector('table', {
       timeout: 120000
     });
@@ -39,53 +38,71 @@ const { chromium } = require('playwright');
     console.log('✅ Table found');
 
     const rowCount = await page.locator('table tbody tr').count();
-    console.log(`Rows found: ${rowCount}`);
+    console.log(`Rows found before filtering: ${rowCount}`);
 
-    // Cutoff = last 5 days including today
+    await page.screenshot({
+      path: 'debug.png',
+      fullPage: true
+    });
+
+    // Keep only rows updated within the last N days
     const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 5);
+    cutoff.setDate(cutoff.getDate() - days);
     cutoff.setHours(0, 0, 0, 0);
 
-    await page.evaluate((cutoffISO) => {
-      const cutoffDate = new Date(cutoffISO);
-      const now = new Date();
+    await page.evaluate(
+      ({ cutoffISO, days }) => {
+        const cutoffDate = new Date(cutoffISO);
+        const now = new Date();
 
-      const rows = document.querySelectorAll('table tbody tr');
+        const rows = document.querySelectorAll('table tbody tr');
 
-      rows.forEach((row) => {
-        const cells = row.querySelectorAll('td');
-        const rawText = cells[5]?.innerText?.trim();
+        rows.forEach((row) => {
+          const cells = row.querySelectorAll('td');
 
-        if (!rawText) {
-          row.remove();
-          return;
+          // Last Updated column (6th column)
+          const rawText = cells[5]?.innerText?.trim();
+
+          if (!rawText) {
+            row.remove();
+            return;
+          }
+
+          const parsedDate = new Date(rawText);
+
+          if (
+            isNaN(parsedDate.getTime()) ||
+            parsedDate < cutoffDate ||
+            parsedDate > now
+          ) {
+            row.remove();
+          }
+        });
+
+        const tbody = document.querySelector('table tbody');
+
+        if (tbody && tbody.children.length === 0) {
+          const row = document.createElement('tr');
+          const cell = document.createElement('td');
+
+          cell.colSpan = 6;
+          cell.style.padding = '10px';
+          cell.style.fontSize = '16px';
+          cell.innerText =
+            `No records updated in the last ${days} days (including today)`;
+
+          row.appendChild(cell);
+          tbody.appendChild(row);
         }
-
-        const parsedDate = new Date(rawText.replace(',', ''));
-
-        if (
-          isNaN(parsedDate) ||
-          parsedDate < cutoffDate ||
-          parsedDate > now
-        ) {
-          row.remove();
-        }
-      });
-
-      const tbody = document.querySelector('table tbody');
-
-      if (tbody && tbody.children.length === 0) {
-        const row = document.createElement('tr');
-        const cell = document.createElement('td');
-
-        cell.colSpan = 6;
-        cell.innerText =
-          'No records updated in the last 5 days (including today)';
-
-        row.appendChild(cell);
-        tbody.appendChild(row);
+      },
+      {
+        cutoffISO: cutoff.toISOString(),
+        days
       }
-    }, cutoff.toISOString());
+    );
+
+    const remainingRows = await page.locator('table tbody tr').count();
+    console.log(`Rows after filtering: ${remainingRows}`);
 
     const table = await page.$('table');
 
@@ -94,23 +111,30 @@ const { chromium } = require('playwright');
 
       if (box) {
         await page.screenshot({
-          path: 'screenshot.png',
-          clip: box
+          path: outputFile,
+          clip: {
+            x: Math.max(0, box.x),
+            y: Math.max(0, box.y),
+            width: box.width,
+            height: box.height
+          }
         });
+
+        console.log(`✅ Screenshot saved: ${outputFile}`);
       } else {
         await page.screenshot({
-          path: 'screenshot.png',
+          path: outputFile,
           fullPage: true
         });
       }
     } else {
+      console.log('⚠️ Table not found. Saving full page.');
+
       await page.screenshot({
-        path: 'screenshot.png',
+        path: outputFile,
         fullPage: true
       });
     }
-
-    console.log('✅ Screenshot saved');
   } catch (error) {
     console.error('ERROR:', error);
 
