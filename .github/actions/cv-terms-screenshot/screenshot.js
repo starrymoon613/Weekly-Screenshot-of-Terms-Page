@@ -17,137 +17,113 @@ const { chromium } = require('playwright');
     const url =
       process.env.URL || 'https://cv.hres.ca/en/terms/15';
 
-    await page.goto(url, {
-      waitUntil: 'networkidle',
-      timeout: 120000
-    });
-
-    await page.waitForSelector('table');
-
-    const allRows = [];
-
-    while (true) {
-      const rows = await page.evaluate(() => {
-        return Array.from(
-          document.querySelectorAll('table tbody tr')
-        ).map(row =>
-          Array.from(row.querySelectorAll('td')).map(td =>
-            td.innerText.trim()
-          )
-        );
-      });
-
-      allRows.push(...rows);
-
-      console.log(`Collected ${allRows.length} rows so far`);
-
-      const nextLink = await page.$('text=Next');
-
-      if (!nextLink) {
-        console.log('No Next button found');
-        break;
-      }
-
-      const nextText = await nextLink.textContent();
-
-      if (!nextText) {
-        break;
-      }
-
-      try {
-        await nextLink.click();
-        await page.waitForTimeout(1500);
-      } catch {
-        console.log('Reached end of pagination');
-        break;
-      }
-    }
-
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 5);
-    cutoff.setHours(0, 0, 0, 0);
-
-    const filteredRows = allRows.filter(row => {
-      if (!row[5]) {
-        return false;
-      }
-
-      const updatedDate = new Date(
-        row[5].replace(' ', 'T')
-      );
-
-      return (
-        !isNaN(updatedDate.getTime()) &&
-        updatedDate >= cutoff
-      );
-    });
-
-    console.log(
-      `Rows updated in last 5 days: ${filteredRows.length}`
-    );
-
-    const tableBody =
-      filteredRows.length > 0
-        ? filteredRows
-            .map(
-              row => `
-<tr>
-  <td>${row[0] || ''}</td>
-  <td>${row[1] || ''}</td>
-  <td>${row[2] || ''}</td>
-  <td>${row[3] || ''}</td>
-  <td>${row[4] || ''}</td>
-  <td>${row[5] || ''}</td>
-</tr>`
-            )
-            .join('')
-        : `
-<tr>
-  <td colspan="6">
-    No records updated in the last 5 days (including today)
-  </td>
-</tr>`;
+    // Temporary test report
+    // This verifies screenshots are working correctly.
 
     await page.setContent(`
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Records Updated in the Last 5 Days</title>
-<style>
-body {
-  font-family: Arial, sans-serif;
-  margin: 20px;
-}
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Records Updated in the Last 5 Days</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+          }
 
-h1 {
-  margin-bottom: 20px;
-}
+          h1 {
+            margin-bottom: 20px;
+          }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
+          table {
+            border-collapse: collapse;
+            width: 100%;
+          }
 
-th,
-td {
-  border: 1px solid #cccccc;
-  padding: 8px;
-  text-align: left;
-}
+          th,
+          td {
+            border: 1px solid #cccccc;
+            padding: 8px;
+            text-align: left;
+          }
 
-th {
-  background-color: #f2f2f2;
-}
-</style>
-</head>
-<body>
+          th {
+            background-color: #f2f2f2;
+          }
+        </style>
+      </head>
+      <body>
 
-<h1>Records Updated in the Last 5 Days</h1>
+        <h1>Records Updated in the Last 5 Days</h1>
 
-<table>
-  <thead>
-    <tr>
-      <th>Code</th>
-      <th>English Display Name</th>
-      <th>French Display Name</th>
+        <table>
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>English Display Name</th>
+              <th>French Display Name</th>
+              <th>Source</th>
+              <th>Status</th>
+              <th>Last Updated</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <tr>
+              <td>AD008X2QJR</td>
+              <td>UBROGEPANT</td>
+              <td>Ubrogépant</td>
+              <td>FDA</td>
+              <td>Active</td>
+              <td>2026-07-16 08:41:01</td>
+            </tr>
+
+            <tr>
+              <td>7CRV8RR151</td>
+              <td>ATOGEPANT</td>
+              <td>Atogépant</td>
+              <td>FDA</td>
+              <td>Active</td>
+              <td>2026-07-16 08:31:46</td>
+            </tr>
+
+            <tr>
+              <td>CO86AOP337</td>
+              <td>ETENTAMIG</td>
+              <td>Étentamig</td>
+              <td>FDA</td>
+              <td>Active</td>
+              <td>2026-07-16 08:09:42</td>
+            </tr>
+
+            <tr>
+              <td>XM71MYX0IQ</td>
+              <td>RUSFERTIDE</td>
+              <td>Rusfertide</td>
+              <td>FDA</td>
+              <td>Active</td>
+              <td>2026-07-17 11:52:42</td>
+            </tr>
+
+            <tr>
+              <td>L82J8IP845</td>
+              <td>RUSFERTIDE ACETATE</td>
+              <td>Acétate de rusfertide</td>
+              <td>FDA</td>
+              <td>Active</td>
+              <td>2026-07-17 11:53:24</td>
+            </tr>
+          </tbody>
+        </table>
+
+      </body>
+      </html>
+    `);
+
+    await page.screenshot({
+      path: process.env.OUTPUT || 'screenshot.png',
+      fullPage: true
+    });
+
+    console.log('
