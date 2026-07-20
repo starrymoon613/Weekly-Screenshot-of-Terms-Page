@@ -1,2 +1,137 @@
-Replace your entire screenshot.js with this:
-JavaScript1const { chromium } = require('playwright');2 3(async () => {4  const browser = await chromium.launch({5    headless: true,6    args: ['--no-sandbox']7  });8 9  const page = await browser.newPage({10    viewport: {11      width: 1600,12      height: 120013    }14  });15 16  try {17    await page.goto('https://cv.hres.ca/en/terms/15', {18      waitUntil: 'networkidle',19      timeout: 12000020    });21 22    await page.waitForSelector('table');23 24    const rows = await page.evaluate(() => {25      return Array.from(26        document.querySelectorAll('table tbody tr')27      ).map(row =>28        Array.from(row.querySelectorAll('td')).map(td =>29          td.innerText.trim()30        )31      );32    });33 34    console.log(`Rows collected: ${rows.length}`);35 36    const cutoff = new Date();37    cutoff.setDate(cutoff.getDate() - 5);38    cutoff.setHours(0, 0, 0, 0);39 40    const filteredRows = rows.filter(row => {41      if (!row[5]) return false;42 43      const date = new Date(row[5].replace(' ', 'T'));44 45      return (46        !isNaN(date.getTime()) &&47        date >= cutoff48      );49    });50 51    console.log(52      `Filtered rows: ${filteredRows.length}`53    );54 55    const tableBody =56      filteredRows.length > 057        ? filteredRows.map(row => `58            <tr>59              <td>${row[0]}</td>60              <td>${row[1]}</td>61              <td>${row[2]}</td>62              <td>${row[3]}</td>63              <td>${row[4]}</td>64              <td>${row[5]}</td>65            </tr>66          `).join('')67        : `68          <tr>69            <td colspan="6">70              No records updated in the last 5 days (including today)71            </td>72          </tr>73        `;74 75    await page.setContent(`76      <!DOCTYPE html>77      <html>78      <head>79        <style>80          body {81            font-family: Arial, sans-serif;82            margin: 20px;83          }84 85          h1 {86            font-size: 24px;87            margin-bottom: 20px;88          }89 90          table {91            width: 100%;92            border-collapse: collapse;93          }94 95          th {96            background: #f3f3f3;97            border: 1px solid #ccc;98            padding: 8px;99            text-align: left;100          }101 102          td {103            border: 1px solid #ccc;104            padding: 8px;105          }106        </style>107      </head>108      <body>109 110        <h1>111          Records updated in the last 5 days112        </h1>113 114        <table>115          <thead>116            <tr>117              <th>Code</th>118              <th>English Display Name</th>119              <th>French Display Name</th>120              <th>Source</th>121              <th>Status</th>122              <th>Last updated</th>123            </tr>124          </thead>125 126          <tbody>127            ${tableBody}128          </tbody>129        </table>130 131      </body>132      </html>133    `);134 135    await page.screenshot({136      path: 'screenshot.png',137      fullPage: true138    });139 140    console.log('Screenshot saved');141  } catch (error) {142    console.error(error);143    throw error;144  } finally {145    await browser.close();146  }147})();148
+const { chromium } = require('playwright');
+
+(async () => {
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--no-sandbox']
+  });
+
+  const page = await browser.newPage({
+    viewport: {
+      width: 1600,
+      height: 1200
+    }
+  });
+
+  try {
+    await page.goto('https://cv.hres.ca/en/terms/15', {
+      waitUntil: 'networkidle',
+      timeout: 120000
+    });
+
+    await page.waitForSelector('table');
+
+    const rows = await page.evaluate(() => {
+      return Array.from(
+        document.querySelectorAll('table tbody tr')
+      ).map(row =>
+        Array.from(row.querySelectorAll('td')).map(td =>
+          td.innerText.trim()
+        )
+      );
+    });
+
+    console.log(`Rows collected: ${rows.length}`);
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 5);
+    cutoff.setHours(0, 0, 0, 0);
+
+    const filteredRows = rows.filter(row => {
+      if (!row[5]) return false;
+
+      const date = new Date(row[5].replace(' ', 'T'));
+
+      return (
+        !isNaN(date.getTime()) &&
+        date >= cutoff
+      );
+    });
+
+    console.log(`Filtered rows: ${filteredRows.length}`);
+
+    const tableBody =
+      filteredRows.length > 0
+        ? filteredRows.map(row => `
+<tr>
+  <td>${row[0]}</td>
+  <td>${row[1]}</td>
+  <td>${row[2]}</td>
+  <td>${row[3]}</td>
+  <td>${row[4]}</td>
+  <td>${row[5]}</td>
+</tr>
+`).join('')
+        : `
+<tr>
+  <td colspan="6">
+    No records updated in the last 5 days (including today)
+  </td>
+</tr>
+`;
+
+    await page.setContent(`
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  margin: 20px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  border: 1px solid #ccc;
+  padding: 8px;
+  text-align: left;
+}
+
+th {
+  background-color: #f2f2f2;
+}
+</style>
+</head>
+<body>
+
+<h2>Records Updated in the Last 5 Days</h2>
+
+<table>
+<thead>
+<tr>
+  <th>Code</th>
+  <th>English Display Name</th>
+  <th>French Display Name</th>
+  <th>Source</th>
+  <th>Status</th>
+  <th>Last Updated</th>
+</tr>
+</thead>
+
+<tbody>
+${tableBody}
+</tbody>
+
+</table>
+
+</body>
+</html>
+`);
+
+    await page.screenshot({
+      path: 'screenshot.png',
+      fullPage: true
+    });
+
+    console.log('Screenshot saved');
+  } catch (error) {
+    console.error(error);
+    throw error;
+  } finally {
+    await browser.close();
+  }
+})();
