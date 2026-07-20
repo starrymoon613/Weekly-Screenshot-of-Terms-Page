@@ -14,33 +14,18 @@ const { chromium } = require('playwright');
   });
 
   try {
-    await page.setContent(`
-      <html>
-      <body>
-        <h1>Records Updated in the Last 5 Days</h1>
+    await page.goto('https://cv.hres.ca/en/terms/15', {
+      waitUntil: 'networkidle',
+      timeout: 120000
+    });
 
-        <table border="1">
-          <tr>
-            <th>Code</th>
-            <th>English Display Name</th>
-            <th>French Display Name</th>
-            <th>Source</th>
-            <th>Status</th>
-            <th>Last Updated</th>
-          </tr>
+    await page.waitForSelector('table');
 
-          <tr>
-            <td>TEST</td>
-            <td>TEST INGREDIENT</td>
-            <td>INGRÉDIENT TEST</td>
-            <td>FDA</td>
-            <td>Active</td>
-            <td>2026-07-17 11:53:24</td>
-          </tr>
-        </table>
-      </body>
-      </html>
-    `);
+    const html = await page.content();
+
+    console.log('==== PAGE HTML START ====');
+    console.log(html);
+    console.log('==== PAGE HTML END ====');
 
     await page.screenshot({
       path: 'screenshot.png',
@@ -48,9 +33,6 @@ const { chromium } = require('playwright');
     });
 
     console.log('Screenshot saved');
-  } catch (error) {
-    console.error(error);
-    process.exit(1);
   } finally {
     await browser.close();
   }
