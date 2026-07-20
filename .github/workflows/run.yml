@@ -28,7 +28,7 @@ jobs:
       - name: Generate screenshot
         env:
           URL: https://cv.hres.ca/en/terms/15
-          DAYS: 5
+          DAYS: '5'
           OUTPUT: screenshot.png
         run: |
           node .github/actions/cv-terms-screenshot/screenshot.js
