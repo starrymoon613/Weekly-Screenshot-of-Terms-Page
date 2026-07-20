@@ -1,42 +1,31 @@
-const { chromium } = require('playwright');
+const allRows = [];
 
-(async () => {
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--no-sandbox']
-  });
-
-  const page = await browser.newPage({
-    viewport: {
-      width: 1920,
-      height: 1080
-    }
-  });
-
-  try {
-    await page.goto(
-      process.env.URL || 'https://cv.hres.ca/en/terms/15',
-      {
-        waitUntil: 'networkidle',
-        timeout: 120000
-      }
+while (true) {
+  const rows = await page.evaluate(() => {
+    return Array.from(
+      document.querySelectorAll('table tbody tr')
+    ).map(row =>
+      Array.from(row.querySelectorAll('td')).map(td =>
+        td.innerText.trim()
+      )
     );
+  });
 
-    await page.waitForSelector('table');
+  allRows.push(...rows);
 
-    console.log('Page loaded successfully');
+  const nextButton = await page.$('#wb-auto-4_next');
 
-    const table = page.locator('table').first();
-
-    await table.screenshot({
-      path: process.env.OUTPUT || 'screenshot.png'
-    });
-
-    console.log('Screenshot saved');
-  } catch (error) {
-    console.error('ERROR:', error);
-    process.exit(1);
-  } finally {
-    await browser.close();
+  if (!nextButton) {
+    break;
   }
-})();
+
+  const classes = await nextButton.getAttribute('class');
+
+  if (classes && classes.includes('disabled')) {
+    break;
+  }
+
+  await nextButton.click();
+
+  await page.waitForTimeout(1500);
+}
