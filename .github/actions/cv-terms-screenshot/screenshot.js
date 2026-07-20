@@ -27,53 +27,23 @@ const { chromium } = require('playwright');
     console.log('===== PAGINATION SEARCH START =====');
 
     const paginationInfo = await page.evaluate(() => {
-      const results = [];
-
-      const selectors = [
-        '.dataTables_paginate',
-        '.pagination',
-        '[id*="paginate"]',
-        '[class*="paginate"]'
-      ];
-
-      selectors.forEach(selector => {
-        document.querySelectorAll(selector).forEach(el => {
-          results.push({
-            selector,
-            html: el.outerHTML
-          });
-        });
-      });
-
-      return results;
+      return document.body.innerText;
     });
 
-    console.log(
-      JSON.stringify(paginationInfo, null, 2)
-    );
+    console.log(paginationInfo);
 
     console.log('===== PAGINATION SEARCH END =====');
 
-    const pageText = await page.textContent('body');
+    await page.screenshot({
+      path: 'screenshot.png',
+      fullPage: true
+    });
 
-    console.log('===== PAGE TEXT START =====');
-    console.log(
-      pageText
-        .split('\n')
-        .filter(line =>
-          line.includes('Next') ||
-          line.includes('Previous') ||
-          line.includes('Showing')
-        )
-        .join('\n')
-    );
-    console.log('===== PAGE TEXT END =====');
-
-    console.log('Pagination diagnostics complete');
+    console.log('Screenshot saved');
   } catch (error) {
     console.error(error);
-    process.exit(1);
-  } finally {
-    await browser.close();
-  }
-})();
+
+    try {
+      await page.screenshot({
+        path: 'error.png',
+     
