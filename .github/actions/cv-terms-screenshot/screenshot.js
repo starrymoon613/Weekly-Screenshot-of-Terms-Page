@@ -24,15 +24,7 @@ const { chromium } = require('playwright');
 
     await page.waitForSelector('table');
 
-    console.log('===== PAGINATION SEARCH START =====');
-
-    const paginationInfo = await page.evaluate(() => {
-      return document.body.innerText;
-    });
-
-    console.log(paginationInfo);
-
-    console.log('===== PAGINATION SEARCH END =====');
+    console.log('Page loaded successfully');
 
     await page.screenshot({
       path: 'screenshot.png',
@@ -42,8 +34,8 @@ const { chromium } = require('playwright');
     console.log('Screenshot saved');
   } catch (error) {
     console.error(error);
-
-    try {
-      await page.screenshot({
-        path: 'error.png',
-     
+    process.exit(1);
+  } finally {
+    await browser.close();
+  }
+})();
