@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
   schedule:
-    # Friday 09:00 AM Ottawa (EDT = UTC-4)
+    # Friday 09:00 Ottawa (EDT)
     - cron: '0 13 * * 5'
 
 jobs:
