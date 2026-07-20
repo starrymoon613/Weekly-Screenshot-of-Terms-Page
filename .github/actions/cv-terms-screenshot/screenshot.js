@@ -14,13 +14,13 @@ const { chromium } = require('playwright');
   });
 
   try {
-    await page.goto(
-      process.env.URL || 'https://cv.hres.ca/en/terms/15',
-      {
-        waitUntil: 'networkidle',
-        timeout: 120000
-      }
-    );
+    const url =
+      process.env.URL || 'https://cv.hres.ca/en/terms/15';
+
+    await page.goto(url, {
+      waitUntil: 'networkidle',
+      timeout: 120000
+    });
 
     await page.waitForSelector('table');
 
@@ -39,32 +39,28 @@ const { chromium } = require('playwright');
 
       allRows.push(...rows);
 
-      console.log(`Collected ${allRows.length} rows`);
+      console.log(`Collected ${allRows.length} rows so far`);
 
-      const nextButton = await page.$('text=Next');
+      const nextLink = await page.$('text=Next');
 
-      if (!nextButton) {
+      if (!nextLink) {
         console.log('No Next button found');
         break;
       }
 
-      const isDisabled = await nextButton.evaluate(node => {
-        const parent = node.parentElement;
+      const nextText = await nextLink.textContent();
 
-        return (
-          node.classList.contains('disabled') ||
-          (parent && parent.classList.contains('disabled'))
-        );
-      });
-
-      if (isDisabled) {
-        console.log('Last page reached');
+      if (!nextText) {
         break;
       }
 
-      await nextButton.click();
-
-      await page.waitForTimeout(1500);
+      try {
+        await nextLink.click();
+        await page.waitForTimeout(1500);
+      } catch {
+        console.log('Reached end of pagination');
+        break;
+      }
     }
 
     const cutoff = new Date();
@@ -72,13 +68,17 @@ const { chromium } = require('playwright');
     cutoff.setHours(0, 0, 0, 0);
 
     const filteredRows = allRows.filter(row => {
-      if (!row[5]) return false;
+      if (!row[5]) {
+        return false;
+      }
 
-      const date = new Date(row[5].replace(' ', 'T'));
+      const updatedDate = new Date(
+        row[5].replace(' ', 'T')
+      );
 
       return (
-        !isNaN(date.getTime()) &&
-        date >= cutoff
+        !isNaN(updatedDate.getTime()) &&
+        updatedDate >= cutoff
       );
     });
 
@@ -88,28 +88,32 @@ const { chromium } = require('playwright');
 
     const tableBody =
       filteredRows.length > 0
-        ? filteredRows.map(row => `
+        ? filteredRows
+            .map(
+              row => `
 <tr>
-  <td>${row[0]}</td>
-  <td>${row[1]}</td>
-  <td>${row[2]}</td>
-  <td>${row[3]}</td>
-  <td>${row[4]}</td>
-  <td>${row[5]}</td>
-</tr>
-`).join('')
+  <td>${row[0] || ''}</td>
+  <td>${row[1] || ''}</td>
+  <td>${row[2] || ''}</td>
+  <td>${row[3] || ''}</td>
+  <td>${row[4] || ''}</td>
+  <td>${row[5] || ''}</td>
+</tr>`
+            )
+            .join('')
         : `
 <tr>
   <td colspan="6">
     No records updated in the last 5 days (including today)
   </td>
-</tr>
-`;
+</tr>`;
 
     await page.setContent(`
 <!DOCTYPE html>
 <html>
 <head>
+<meta charset="utf-8">
+<title>Records Updated in the Last 5 Days</title>
 <style>
 body {
   font-family: Arial, sans-serif;
@@ -127,4 +131,23 @@ table {
 
 th,
 td {
-  border: 1px solid #ccc;
+  border: 1px solid #cccccc;
+  padding: 8px;
+  text-align: left;
+}
+
+th {
+  background-color: #f2f2f2;
+}
+</style>
+</head>
+<body>
+
+<h1>Records Updated in the Last 5 Days</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>Code</th>
+      <th>English Display Name</th>
+      <th>French Display Name</th>
