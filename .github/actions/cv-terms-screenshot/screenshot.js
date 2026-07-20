@@ -1,31 +1,42 @@
-const allRows = [];
+const { chromium } = require('playwright');
 
-while (true) {
-  const rows = await page.evaluate(() => {
-    return Array.from(
-      document.querySelectorAll('table tbody tr')
-    ).map(row =>
-      Array.from(row.querySelectorAll('td')).map(td =>
-        td.innerText.trim()
-      )
-    );
+(async () => {
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--no-sandbox']
   });
 
-  allRows.push(...rows);
+  const page = await browser.newPage({
+    viewport: {
+      width: 1920,
+      height: 1080
+    }
+  });
 
-  const nextButton = await page.$('#wb-auto-4_next');
+  try {
+    await page.goto(
+      'https://cv.hres.ca/en/terms/15',
+      {
+        waitUntil: 'networkidle',
+        timeout: 120000
+      }
+    );
 
-  if (!nextButton) {
-    break;
+    await page.waitForSelector('table');
+
+    console.log('Page loaded successfully');
+
+    const table = page.locator('table').first();
+
+    await table.screenshot({
+      path: 'screenshot.png'
+    });
+
+    console.log('Screenshot saved');
+  } catch (error) {
+    console.error(error);
+    process.exit(1);
+  } finally {
+    await browser.close();
   }
-
-  const classes = await nextButton.getAttribute('class');
-
-  if (classes && classes.includes('disabled')) {
-    break;
-  }
-
-  await nextButton.click();
-
-  await page.waitForTimeout(1500);
-}
+})();
