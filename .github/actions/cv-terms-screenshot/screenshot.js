@@ -8,14 +8,14 @@ const { chromium } = require('playwright');
 
   const page = await browser.newPage({
     viewport: {
-      width: 1600,
-      height: 1200
+      width: 1920,
+      height: 1080
     }
   });
 
   try {
     await page.goto(
-      'https://cv.hres.ca/en/terms/15',
+      process.env.URL || 'https://cv.hres.ca/en/terms/15',
       {
         waitUntil: 'networkidle',
         timeout: 120000
@@ -26,14 +26,15 @@ const { chromium } = require('playwright');
 
     console.log('Page loaded successfully');
 
-    await page.screenshot({
-      path: 'screenshot.png',
-      fullPage: true
+    const table = page.locator('table').first();
+
+    await table.screenshot({
+      path: process.env.OUTPUT || 'screenshot.png'
     });
 
     console.log('Screenshot saved');
   } catch (error) {
-    console.error(error);
+    console.error('ERROR:', error);
     process.exit(1);
   } finally {
     await browser.close();
