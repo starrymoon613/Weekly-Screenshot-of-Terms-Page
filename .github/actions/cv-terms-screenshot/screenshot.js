@@ -14,30 +14,64 @@ const { chromium } = require('playwright');
   });
 
   try {
-    await page.goto('https://cv.hres.ca/en/terms/15', {
-      waitUntil: 'networkidle',
-      timeout: 120000
-    });
+    await page.goto(
+      process.env.URL || 'https://cv.hres.ca/en/terms/15',
+      {
+        waitUntil: 'networkidle',
+        timeout: 120000
+      }
+    );
 
     await page.waitForSelector('table');
 
-    const rows = await page.evaluate(() => {
-      return Array.from(
-        document.querySelectorAll('table tbody tr')
-      ).map(row =>
-        Array.from(row.querySelectorAll('td')).map(td =>
-          td.innerText.trim()
-        )
-      );
-    });
+    const allRows = [];
 
-    console.log(`Rows collected: ${rows.length}`);
+    while (true) {
+      const rows = await page.evaluate(() => {
+        return Array.from(
+          document.querySelectorAll('table tbody tr')
+        ).map(row =>
+          Array.from(row.querySelectorAll('td')).map(td =>
+            td.innerText.trim()
+          )
+        );
+      });
+
+      allRows.push(...rows);
+
+      console.log(`Collected ${allRows.length} rows`);
+
+      const nextButton = await page.$('text=Next');
+
+      if (!nextButton) {
+        console.log('No Next button found');
+        break;
+      }
+
+      const isDisabled = await nextButton.evaluate(node => {
+        const parent = node.parentElement;
+
+        return (
+          node.classList.contains('disabled') ||
+          (parent && parent.classList.contains('disabled'))
+        );
+      });
+
+      if (isDisabled) {
+        console.log('Last page reached');
+        break;
+      }
+
+      await nextButton.click();
+
+      await page.waitForTimeout(1500);
+    }
 
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 5);
     cutoff.setHours(0, 0, 0, 0);
 
-    const filteredRows = rows.filter(row => {
+    const filteredRows = allRows.filter(row => {
       if (!row[5]) return false;
 
       const date = new Date(row[5].replace(' ', 'T'));
@@ -48,7 +82,9 @@ const { chromium } = require('playwright');
       );
     });
 
-    console.log(`Filtered rows: ${filteredRows.length}`);
+    console.log(
+      `Rows updated in last 5 days: ${filteredRows.length}`
+    );
 
     const tableBody =
       filteredRows.length > 0
@@ -80,58 +116,15 @@ body {
   margin: 20px;
 }
 
+h1 {
+  margin-bottom: 20px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
 }
 
-th, td {
+th,
+td {
   border: 1px solid #ccc;
-  padding: 8px;
-  text-align: left;
-}
-
-th {
-  background-color: #f2f2f2;
-}
-</style>
-</head>
-<body>
-
-<h2>Records Updated in the Last 5 Days</h2>
-
-<table>
-<thead>
-<tr>
-  <th>Code</th>
-  <th>English Display Name</th>
-  <th>French Display Name</th>
-  <th>Source</th>
-  <th>Status</th>
-  <th>Last Updated</th>
-</tr>
-</thead>
-
-<tbody>
-${tableBody}
-</tbody>
-
-</table>
-
-</body>
-</html>
-`);
-
-    await page.screenshot({
-      path: 'screenshot.png',
-      fullPage: true
-    });
-
-    console.log('Screenshot saved');
-  } catch (error) {
-    console.error(error);
-    throw error;
-  } finally {
-    await browser.close();
-  }
-})();
