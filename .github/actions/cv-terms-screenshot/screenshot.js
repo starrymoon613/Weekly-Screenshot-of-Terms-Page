@@ -88,42 +88,42 @@ const { chromium } = require('playwright');
 <html>
 <head>
 <meta charset="utf-8">
-<title>Records Updated in the Last ${days} Days</title>
 
 <style>
 body {
-  font-family: Arial, sans-serif;
-  margin: 20px;
-}
-
-h1 {
-  margin-bottom: 20px;
+  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  padding: 0;
 }
 
 table {
-  border-collapse: collapse;
   width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
 }
 
-th {
-  background-color: #f2f2f2;
-  border: 1px solid #cccccc;
+thead th {
+  background-color: #e5e5e5;
+  border: 1px solid #d4d4d4;
   padding: 8px;
   text-align: left;
+  font-weight: bold;
 }
 
-td {
-  border: 1px solid #cccccc;
+tbody td {
+  border: 1px solid #dcdcdc;
   padding: 8px;
+  vertical-align: top;
+}
+
+tbody tr:nth-child(even) {
+  background-color: #f7f7f7;
 }
 </style>
+
 </head>
 
 <body>
-
-<h1>
-Records Updated in the Last ${days} Days
-</h1>
 
 <table>
 <thead>
@@ -133,7 +133,7 @@ Records Updated in the Last ${days} Days
   <th>French Display Name</th>
   <th>Source</th>
   <th>Status</th>
-  <th>Last Updated</th>
+  <th>Last updated</th>
 </tr>
 </thead>
 
@@ -160,3 +160,4 @@ ${tableBody}
     await browser.close();
   }
 })();
+``
