@@ -6,7 +6,12 @@ const { chromium } = require('playwright');
     args: ['--no-sandbox']
   });
 
-  const page = await browser.newPage();
+  const page = await browser.newPage({
+    viewport: {
+      width: 1600,
+      height: 1200
+    }
+  });
 
   try {
     await page.goto(
@@ -19,15 +24,45 @@ const { chromium } = require('playwright');
 
     await page.waitForSelector('#wb-auto-4');
 
+    await page.waitForTimeout(5000);
+
+    const diagnostics = await page.evaluate(() => {
+      return {
+        hasJQuery: typeof window.jQuery !== 'undefined',
+        hasDataTable:
+          typeof window.jQuery !== 'undefined' &&
+          typeof window.jQuery.fn !== 'undefined' &&
+          typeof window.jQuery.fn.dataTable !== 'undefined',
+        tableFound: !!document.querySelector('#wb-auto-4')
+      };
+    });
+
+    console.log(
+      'Diagnostics:',
+      JSON.stringify(diagnostics, null, 2)
+    );
+
+    if (!diagnostics.hasDataTable) {
+      throw new Error(
+        'DataTable plugin not available'
+      );
+    }
+
     const rows = await page.evaluate(() => {
-      return jQuery('#wb-auto-4')
+      return window
+        .jQuery('#wb-auto-4')
         .DataTable()
         .rows()
         .data()
         .toArray();
     });
 
-    const days = parseInt(process.env.DAYS || '5', 10);
+    console.log(`Total rows found: ${rows.length}`);
+
+    const days = parseInt(
+      process.env.DAYS || '5',
+      10
+    );
 
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - days);
@@ -36,7 +71,9 @@ const { chromium } = require('playwright');
     const filteredRows = rows.filter(row => {
       const rawDate = row[5];
 
-      if (!rawDate) return false;
+      if (!rawDate) {
+        return false;
+      }
 
       const updatedDate = new Date(
         rawDate.replace(' ', 'T')
@@ -47,6 +84,10 @@ const { chromium } = require('playwright');
         updatedDate >= cutoff
       );
     });
+
+    console.log(
+      `Rows updated within ${days} days: ${filteredRows.length}`
+    );
 
     const tableBody =
       filteredRows.length > 0
@@ -63,7 +104,7 @@ const { chromium } = require('playwright');
         : `
 <tr>
   <td colspan="6">
-    No records updated in the last ${days} days (including today)
+    No records updated in the last ${days} days
   </td>
 </tr>
 `;
@@ -92,7 +133,6 @@ thead th {
   border: 1px solid #d4d4d4;
   padding: 8px;
   text-align: left;
-  font-weight: bold;
 }
 
 tbody td {
@@ -101,26 +141,28 @@ tbody td {
 }
 
 tbody tr:nth-child(even) {
-  background-color: #f7f7f7;
+  background: #f7f7f7;
 }
 </style>
 </head>
 <body>
 
 <table id="reportTable">
-  <thead>
-    <tr>
-      <th>Code</th>
-      <th>English Display Name</th>
-      <th>French Display Name</th>
-      <th>Source</th>
-      <th>Status</th>
-      <th>Last updated</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${tableBody}
-  </tbody>
+<thead>
+<tr>
+<th>Code</th>
+<th>English Display Name</th>
+<th>French Display Name</th>
+<th>Source</th>
+<th>Status</th>
+<th>Last updated</th>
+</tr>
+</thead>
+
+<tbody>
+${tableBody}
+</tbody>
+
 </table>
 
 </body>
