@@ -41,9 +41,7 @@ const { chromium } = require('playwright');
     const filteredRows = rows.filter(row => {
       const rawDate = row[5];
 
-      if (!rawDate) {
-        return false;
-      }
+      if (!rawDate) return false;
 
       const updatedDate = new Date(
         rawDate.replace(' ', 'T')
@@ -57,9 +55,7 @@ const { chromium } = require('playwright');
 
     const tableBody =
       filteredRows.length > 0
-        ? filteredRows
-            .map(
-              row => `
+        ? filteredRows.map(row => `
 <tr>
   <td>${row[0]}</td>
   <td>${row[1]}</td>
@@ -67,22 +63,21 @@ const { chromium } = require('playwright');
   <td>${row[3]}</td>
   <td>${row[4]}</td>
   <td>${row[5]}</td>
-</tr>`
-            )
-            .join('')
+</tr>
+`).join('')
         : `
 <tr>
   <td colspan="6">
     No records updated in the last ${days} days (including today)
   </td>
-</tr>`;
+</tr>
+`;
 
     await page.setContent(`
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-
 <style>
 body {
   font-family: Arial, Helvetica, sans-serif;
@@ -114,9 +109,7 @@ tbody tr:nth-child(even) {
   background-color: #f7f7f7;
 }
 </style>
-
 </head>
-
 <body>
 
 <table>
@@ -129,4 +122,28 @@ tbody tr:nth-child(even) {
   <th>Status</th>
   <th>Last updated</th>
 </tr>
-</thead
+</thead>
+
+<tbody>
+${tableBody}
+</tbody>
+
+</table>
+
+</body>
+</html>
+`);
+
+    await page.screenshot({
+      path: process.env.OUTPUT || 'screenshot.png',
+      fullPage: true
+    });
+
+    console.log('Screenshot saved');
+  } catch (error) {
+    console.error(error);
+    process.exit(1);
+  } finally {
+    await browser.close();
+  }
+})();
