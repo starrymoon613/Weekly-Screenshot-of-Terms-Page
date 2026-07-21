@@ -6,12 +6,7 @@ const { chromium } = require('playwright');
     args: ['--no-sandbox']
   });
 
-  const page = await browser.newPage({
-    viewport: {
-      width: 1600,
-      height: 1200
-    }
-  });
+  const page = await browser.newPage();
 
   try {
     await page.goto(
@@ -32,8 +27,6 @@ const { chromium } = require('playwright');
         .toArray();
     });
 
-    console.log(`Total rows found: ${rows.length}`);
-
     const days = parseInt(process.env.DAYS || '5', 10);
 
     const cutoff = new Date();
@@ -43,21 +36,17 @@ const { chromium } = require('playwright');
     const filteredRows = rows.filter(row => {
       const rawDate = row[5];
 
-      if (!rawDate) {
-        return false;
-      }
+      if (!rawDate) return false;
 
-      const updatedDate = new Date(rawDate.replace(' ', 'T'));
+      const updatedDate = new Date(
+        rawDate.replace(' ', 'T')
+      );
 
       return (
         !isNaN(updatedDate.getTime()) &&
         updatedDate >= cutoff
       );
     });
-
-    console.log(
-      `Rows updated within ${days} days: ${filteredRows.length}`
-    );
 
     const tableBody =
       filteredRows.length > 0
@@ -85,10 +74,11 @@ const { chromium } = require('playwright');
 <head>
 <meta charset="utf-8">
 <style>
-body {
-  font-family: Arial, Helvetica, sans-serif;
+html, body {
   margin: 0;
   padding: 0;
+  background: white;
+  font-family: Arial, Helvetica, sans-serif;
 }
 
 table {
@@ -108,7 +98,6 @@ thead th {
 tbody td {
   border: 1px solid #dcdcdc;
   padding: 8px;
-  vertical-align: top;
 }
 
 tbody tr:nth-child(even) {
@@ -118,7 +107,7 @@ tbody tr:nth-child(even) {
 </head>
 <body>
 
-<table>
+<table id="reportTable">
   <thead>
     <tr>
       <th>Code</th>
@@ -138,9 +127,10 @@ tbody tr:nth-child(even) {
 </html>
 `);
 
-    await page.screenshot({
-      path: process.env.OUTPUT || 'screenshot.png',
-      fullPage: true
+    const table = page.locator('#reportTable');
+
+    await table.screenshot({
+      path: process.env.OUTPUT || 'screenshot.png'
     });
 
     console.log('Screenshot saved');
