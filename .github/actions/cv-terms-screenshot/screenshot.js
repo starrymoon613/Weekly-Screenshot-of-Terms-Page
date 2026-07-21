@@ -32,8 +32,6 @@ const { chromium } = require('playwright');
         .toArray();
     });
 
-    console.log(`Total rows found: ${rows.length}`);
-
     const days = parseInt(process.env.DAYS || '5', 10);
 
     const cutoff = new Date();
@@ -56,10 +54,6 @@ const { chromium } = require('playwright');
         updatedDate >= cutoff
       );
     });
-
-    console.log(
-      `Rows updated within ${days} days: ${filteredRows.length}`
-    );
 
     const tableBody =
       filteredRows.length > 0
@@ -135,29 +129,4 @@ tbody tr:nth-child(even) {
   <th>Status</th>
   <th>Last updated</th>
 </tr>
-</thead>
-
-<tbody>
-${tableBody}
-</tbody>
-
-</table>
-
-</body>
-</html>
-`);
-
-    await page.screenshot({
-      path: process.env.OUTPUT || 'screenshot.png',
-      fullPage: true
-    });
-
-    console.log('Screenshot saved');
-  } catch (error) {
-    console.error(error);
-    process.exit(1);
-  } finally {
-    await browser.close();
-  }
-})();
-``
+</thead
