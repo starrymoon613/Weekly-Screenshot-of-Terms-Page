@@ -47,9 +47,7 @@ const { chromium } = require('playwright');
         return false;
       }
 
-      const updatedDate = new Date(
-        rawDate.replace(' ', 'T')
-      );
+      const updatedDate = new Date(rawDate.replace(' ', 'T'));
 
       return (
         !isNaN(updatedDate.getTime()) &&
@@ -63,9 +61,7 @@ const { chromium } = require('playwright');
 
     const tableBody =
       filteredRows.length > 0
-        ? filteredRows
-            .map(
-              row => `
+        ? filteredRows.map(row => `
 <tr>
   <td>${row[0]}</td>
   <td>${row[1]}</td>
@@ -73,15 +69,15 @@ const { chromium } = require('playwright');
   <td>${row[3]}</td>
   <td>${row[4]}</td>
   <td>${row[5]}</td>
-</tr>`
-            )
-            .join('')
+</tr>
+`).join('')
         : `
 <tr>
   <td colspan="6">
     No records updated in the last ${days} days (including today)
   </td>
-</tr>`;
+</tr>
+`;
 
     await page.setContent(`
 <!DOCTYPE html>
@@ -120,9 +116,38 @@ tbody tr:nth-child(even) {
 }
 </style>
 </head>
-
 <body>
 
 <table>
   <thead>
-    <
+    <tr>
+      <th>Code</th>
+      <th>English Display Name</th>
+      <th>French Display Name</th>
+      <th>Source</th>
+      <th>Status</th>
+      <th>Last updated</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${tableBody}
+  </tbody>
+</table>
+
+</body>
+</html>
+`);
+
+    await page.screenshot({
+      path: process.env.OUTPUT || 'screenshot.png',
+      fullPage: true
+    });
+
+    console.log('Screenshot saved');
+  } catch (error) {
+    console.error(error);
+    process.exit(1);
+  } finally {
+    await browser.close();
+  }
+})();
