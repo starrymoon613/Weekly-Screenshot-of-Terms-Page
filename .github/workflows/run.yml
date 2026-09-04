@@ -4,7 +4,6 @@ on:
   workflow_dispatch:
 
   schedule:
-    # Friday 09:00 Ottawa (EDT)
     - cron: '0 13 * * 5'
 
 jobs:
@@ -12,16 +11,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install Playwright
-        run: |
+      - run: |
           npm install playwright
           npx playwright install chromium --with-deps
 
@@ -30,17 +26,11 @@ jobs:
           URL: https://cv.hres.ca/en/terms/15
           DAYS: '5'
           OUTPUT: screenshot.png
-        run: |
-          node .github/actions/cv-terms-screenshot/screenshot.js
+        run: node .github/actions/cv-terms-screenshot/screenshot.js
 
-      - name: Verify screenshot created
-        run: |
-          ls -lah
-          test -f screenshot.png
+      - run: test -f screenshot.png
 
-      - name: Upload screenshot artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: cv-terms-screenshot
           path: screenshot.png
-          if-no-files-found: error
